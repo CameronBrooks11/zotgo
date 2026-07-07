@@ -40,6 +40,7 @@ type ItemData struct {
 	Version     int       `json:"version"`
 	ItemType    string    `json:"itemType"`
 	Title       string    `json:"title"`
+	Date        string    `json:"date"`
 	Creators    []Creator `json:"creators"`
 	Tags        []Tag     `json:"tags"`
 	Collections []string  `json:"collections"`
