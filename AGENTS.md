@@ -22,8 +22,9 @@ attribution obligation. Licensed AGPL-3.0.
 ## Environment and commands
 
 Requires [Go](https://go.dev/) 1.23+ and [`just`](https://github.com/casey/just).
-The runtime dependency set is the standard library; third-party Go modules are
-confined to the CLI layer and justified one at a time.
+The SDK (`internal/zotero`) and rendering (`internal/render`) use only the
+standard library; third-party Go modules are confined to the CLI layer
+(`urfave/cli/v3`) and justified one at a time.
 
 - `just setup` — download + verify modules
 - `just fmt` — format (`gofmt -w`)
@@ -53,9 +54,10 @@ Always run `just check` and `just test` before committing. Both must be green.
 ## Layout
 
 ```text
-cmd/zot/          CLI entry point (thin; command dispatch + rendering)
+cmd/zot/          CLI entry point (urfave/cli commands; one file per command)
 internal/
   zotero/         the SDK — HTTP client for the Local API + Connector API
+  render/          table + JSON output (stdlib only, no network)
 working/          local planning docs (gitignored)
 _reference/       pyzot + zotero upstream, for mining (gitignored)
 ```

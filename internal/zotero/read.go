@@ -24,7 +24,7 @@ type Page struct {
 type ItemsOptions struct {
 	Top        bool
 	Collection string
-	Tag        string
+	Tags       []string
 	Limit      int
 	Start      int
 	Query      string
@@ -34,7 +34,8 @@ type ItemsOptions struct {
 
 // CollectionsOptions controls collection-list requests.
 type CollectionsOptions struct {
-	Top bool
+	Top   bool
+	Start int
 }
 
 // Items reads a single page of items.
@@ -60,14 +61,10 @@ func (c *Client) AllItems(ctx context.Context, library LibraryRef, opts ItemsOpt
 			return nil, err
 		}
 		all = append(all, items...)
-		if page.NextURL == "" {
+		start, more := nextStart(page.NextURL)
+		if !more {
 			return all, nil
 		}
-		next, err := url.Parse(page.NextURL)
-		if err != nil {
-			return nil, err
-		}
-		start, _ := strconv.Atoi(next.Query().Get("start"))
 		opts.Start = start
 	}
 }
@@ -92,9 +89,30 @@ func (c *Client) Collections(ctx context.Context, library LibraryRef, opts Colle
 	if opts.Top {
 		path += "/top"
 	}
+	var values url.Values
+	if opts.Start > 0 {
+		values = url.Values{"start": {strconv.Itoa(opts.Start)}}
+	}
 	var collections []Envelope
-	page, err := c.getJSON(ctx, path, nil, &collections)
+	page, err := c.getJSON(ctx, path, values, &collections)
 	return collections, page, err
+}
+
+// AllCollections follows Link rel="next" and returns every collection.
+func (c *Client) AllCollections(ctx context.Context, library LibraryRef, opts CollectionsOptions) ([]Envelope, error) {
+	var all []Envelope
+	for {
+		cols, page, err := c.Collections(ctx, library, opts)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, cols...)
+		start, more := nextStart(page.NextURL)
+		if !more {
+			return all, nil
+		}
+		opts.Start = start
+	}
 }
 
 func itemValues(opts ItemsOptions) url.Values {
@@ -114,8 +132,10 @@ func itemValues(opts ItemsOptions) url.Values {
 	if opts.ItemType != "" {
 		v.Set("itemType", opts.ItemType)
 	}
-	if opts.Tag != "" {
-		v.Set("tag", opts.Tag)
+	for _, tag := range opts.Tags {
+		if tag != "" {
+			v.Add("tag", tag)
+		}
 	}
 	if len(v) == 0 {
 		return nil
@@ -164,6 +184,20 @@ func pageFromHeader(h http.Header) Page {
 		SchemaVersion:       h.Get("Zotero-Schema-Version"),
 		APIVersion:          h.Get("Zotero-API-Version"),
 	}
+}
+
+// nextStart extracts the start offset from a Link rel="next" URL. The second
+// return is false when there is no further page.
+func nextStart(nextURL string) (int, bool) {
+	if nextURL == "" {
+		return 0, false
+	}
+	u, err := url.Parse(nextURL)
+	if err != nil {
+		return 0, false
+	}
+	start, _ := strconv.Atoi(u.Query().Get("start"))
+	return start, true
 }
 
 func linkRel(header, rel string) string {

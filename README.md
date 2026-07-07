@@ -9,9 +9,9 @@ zotgo is the successor to [`pyzot`](https://github.com/CameronBrooks11/pyzot),
 rebuilt from scratch to talk to Zotero the way Zotero wants to be talked to:
 over HTTP, never through its database.
 
-> **Status: early (M0).** The walking skeleton, tooling, and release pipeline
-> are in place. Today the binary ships one command — `zot doctor`. Read, export,
-> and add commands land in subsequent milestones.
+> **Status: early (v0.1).** A working read-only CLI — browse, search, and
+> inspect your library. Export and write (`add`) commands land in subsequent
+> milestones.
 
 ## How it works
 
@@ -49,6 +49,23 @@ Ready. zotgo can read your library.
 If the Local API is off, `doctor` prints the exact steps to enable it
 (Zotero → Settings → Advanced → "Allow other applications on this computer to
 communicate with Zotero").
+
+## Commands
+
+```bash
+zot list                       # top-level items (default 25)
+zot list -c "Smart Grid" -n 50 # items in a collection, by name or key
+zot list --tag ml --tag review # items with all given tags
+zot search "state estimation"  # search by title/creator/year
+zot search algae --everything  # include full text and notes
+zot show HRAC4E44              # one item with its attachments and notes
+zot collections               # collections as a tree (--flat for a list)
+zot stats                     # library-wide counts
+```
+
+Global flags: `--library/-L` selects a group library (by name or id; default is
+My Library), `--json` emits JSON instead of a table, and `--url` overrides the
+Zotero address. Any command can be scripted with `--json`.
 
 ## Development
 
