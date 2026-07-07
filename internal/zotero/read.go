@@ -40,16 +40,26 @@ type CollectionsOptions struct {
 
 // Items reads a single page of items.
 func (c *Client) Items(ctx context.Context, library LibraryRef, opts ItemsOptions) ([]Envelope, Page, error) {
-	path := library.Prefix() + "/items"
+	var items []Envelope
+	page, err := c.getJSON(ctx, itemsPath(library, opts), itemValues(opts), &items)
+	return items, page, err
+}
+
+// itemsPath is the Local API path for an item query, honoring the collection
+// scope and the top-level filter.
+func itemsPath(library LibraryRef, opts ItemsOptions) string {
 	if opts.Collection != "" {
-		path = library.Prefix() + "/collections/" + url.PathEscape(opts.Collection) + "/items"
+		path := library.Prefix() + "/collections/" + url.PathEscape(opts.Collection) + "/items"
+		if opts.Top {
+			path += "/top"
+		}
+		return path
 	}
+	path := library.Prefix() + "/items"
 	if opts.Top {
 		path += "/top"
 	}
-	var items []Envelope
-	page, err := c.getJSON(ctx, path, itemValues(opts), &items)
-	return items, page, err
+	return path
 }
 
 // AllItems follows Link rel="next" and returns the full result set.
@@ -143,36 +153,58 @@ func itemValues(opts ItemsOptions) url.Values {
 	return v
 }
 
-func (c *Client) getJSON(ctx context.Context, path string, values url.Values, out any) (Page, error) {
+// do performs a GET and returns the full response body plus pagination/version
+// headers, mapping non-2xx responses to the typed error taxonomy.
+func (c *Client) do(ctx context.Context, path string, values url.Values) ([]byte, Page, error) {
 	if len(values) > 0 {
 		path += "?" + values.Encode()
 	}
 	resp, err := c.get(ctx, path)
 	if err != nil {
-		return Page{}, errors.Join(ErrZoteroDown, err)
+		return nil, Page{}, errors.Join(ErrZoteroDown, err)
 	}
 	defer resp.Body.Close()
 
 	page := pageFromHeader(resp.Header)
+	body, readErr := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		switch resp.StatusCode {
 		case http.StatusForbidden:
-			if strings.Contains(string(body), "Local API is not enabled") || len(body) == 0 {
-				return page, ErrLocalAPIDisabled
+			if len(body) == 0 || strings.Contains(string(body), "Local API is not enabled") {
+				return nil, page, ErrLocalAPIDisabled
 			}
 		case http.StatusNotFound:
-			return page, ErrNotFound
+			return nil, page, ErrNotFound
 		}
-		return page, StatusError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
+		return nil, page, StatusError{StatusCode: resp.StatusCode, Body: snippet(body)}
 	}
-	if out == nil {
+	if readErr != nil {
+		return nil, page, readErr
+	}
+	return body, page, nil
+}
+
+func (c *Client) getJSON(ctx context.Context, path string, values url.Values, out any) (Page, error) {
+	body, page, err := c.do(ctx, path, values)
+	if err != nil {
+		return page, err
+	}
+	if out == nil || len(body) == 0 {
 		return page, nil
 	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	if err := json.Unmarshal(body, out); err != nil {
 		return page, err
 	}
 	return page, nil
+}
+
+// snippet trims a response body for inclusion in an error message.
+func snippet(body []byte) string {
+	s := strings.TrimSpace(string(body))
+	if len(s) > 512 {
+		s = s[:512]
+	}
+	return s
 }
 
 func pageFromHeader(h http.Header) Page {

@@ -9,9 +9,8 @@ zotgo is the successor to [`pyzot`](https://github.com/CameronBrooks11/pyzot),
 rebuilt from scratch to talk to Zotero the way Zotero wants to be talked to:
 over HTTP, never through its database.
 
-> **Status: early (v0.1).** A working read-only CLI — browse, search, and
-> inspect your library. Export and write (`add`) commands land in subsequent
-> milestones.
+> **Status: early (v0.2).** A working read-only CLI — browse, search, inspect,
+> and export your library. Write (`add`) commands land in subsequent milestones.
 
 ## How it works
 
@@ -61,7 +60,14 @@ zot search algae --everything  # include full text and notes
 zot show HRAC4E44              # one item with its attachments and notes
 zot collections               # collections as a tree (--flat for a list)
 zot stats                     # library-wide counts
+zot export bib -c Polyhedra   # BibTeX (from Zotero), scoped to a collection
+zot export csljson -o refs.json
+zot export csv                # also: json, md
 ```
+
+`export` produces `bibtex` and `csljson` from Zotero itself (no reimplemented
+bibliography formatting) and shapes `json`/`csv`/`md` locally; `-o` writes to a
+file instead of stdout.
 
 Global flags: `--library/-L` selects a group library (by name or id; default is
 My Library), `--json` emits JSON instead of a table, and `--url` overrides the

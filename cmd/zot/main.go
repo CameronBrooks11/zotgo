@@ -70,6 +70,7 @@ func rootCommand() *cli.Command {
 			searchCommand(),
 			collectionsCommand(),
 			statsCommand(),
+			exportCommand(),
 		},
 	}
 }

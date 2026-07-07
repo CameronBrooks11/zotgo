@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -32,7 +33,16 @@ func fakeZotero(localAPIEnabled bool) *httptest.Server {
 		}
 	}
 
-	mux.HandleFunc("GET /api/users/0/items/top", guard(func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /api/users/0/items/top", guard(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("format") {
+		case "bibtex":
+			w.Header().Set("Content-Type", "application/x-bibtex")
+			_, _ = w.Write([]byte("@article{posten2009,\n\ttitle = {Algae paper}\n}\n"))
+			return
+		case "csljson":
+			_, _ = w.Write([]byte(`[{"id":"AAAA1111","type":"article-journal"}]`))
+			return
+		}
 		w.Header().Set("Total-Results", "2")
 		w.Header().Set("Zotero-Schema-Version", "42")
 		_, _ = w.Write([]byte(`[
@@ -209,6 +219,59 @@ func TestListUnknownCollection(t *testing.T) {
 	_, _, err := runCLI(srv.URL, "list", "-c", "Nonexistent")
 	if err == nil || !strings.Contains(err.Error(), "no collection matching") {
 		t.Fatalf("err = %v, want no-collection message", err)
+	}
+}
+
+func TestExportBibtex(t *testing.T) {
+	srv := fakeZotero(true)
+	defer srv.Close()
+	out, _, err := runCLI(srv.URL, "export", "bib")
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if !strings.Contains(out, "@article{posten2009") {
+		t.Errorf("bibtex output unexpected:\n%s", out)
+	}
+}
+
+func TestExportCSV(t *testing.T) {
+	srv := fakeZotero(true)
+	defer srv.Close()
+	out, _, err := runCLI(srv.URL, "export", "csv")
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if !strings.HasPrefix(out, "key,type,title") || !strings.Contains(out, "AAAA1111") {
+		t.Errorf("csv output unexpected:\n%s", out)
+	}
+}
+
+func TestExportUnknownFormat(t *testing.T) {
+	srv := fakeZotero(true)
+	defer srv.Close()
+	_, _, err := runCLI(srv.URL, "export", "pdf")
+	if err == nil || !strings.Contains(err.Error(), "unknown format") {
+		t.Fatalf("err = %v, want unknown-format error", err)
+	}
+}
+
+func TestExportToFile(t *testing.T) {
+	srv := fakeZotero(true)
+	defer srv.Close()
+	path := t.TempDir() + "/out.bib"
+	_, errOut, err := runCLI(srv.URL, "export", "bibtex", "-o", path)
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	data, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("output file not written: %v", readErr)
+	}
+	if !strings.Contains(string(data), "@article{posten2009") {
+		t.Errorf("file content unexpected:\n%s", data)
+	}
+	if !strings.Contains(errOut, "wrote") {
+		t.Errorf("expected 'wrote' diagnostic on stderr, got %q", errOut)
 	}
 }
 
