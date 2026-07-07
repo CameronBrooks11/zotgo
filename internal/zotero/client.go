@@ -8,6 +8,7 @@ package zotero
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -29,6 +30,7 @@ func New(baseURL string) *Client {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
+	baseURL = strings.TrimRight(baseURL, "/")
 	return &Client{
 		baseURL: baseURL,
 		http:    &http.Client{Timeout: 5 * time.Second},
@@ -45,5 +47,6 @@ func (c *Client) get(ctx context.Context, path string) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("Zotero-API-Version", "3")
 	return c.http.Do(req)
 }
