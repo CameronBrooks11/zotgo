@@ -1,0 +1,52 @@
+# goreleaser config — cross-compiled, zero-dependency static binaries.
+# Validate with `just release-check`; dry-run with `just release-snapshot`.
+version: 2
+
+project_name: zotgo
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: zot
+    main: ./cmd/zot
+    binary: zot
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: zot
+    formats: [tar.gz]
+    name_template: "zot_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+
+release:
+  draft: false

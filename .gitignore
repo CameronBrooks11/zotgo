@@ -39,4 +39,8 @@ Thumbs.db
 artifacts/
 output/
 _reference/
+
+# Build output
+/bin/
+/dist/
 working/
