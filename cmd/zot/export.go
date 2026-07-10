@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/urfave/cli/v3"
@@ -98,11 +99,46 @@ func writeExport(cmd *cli.Command, path string, data []byte) error {
 		_, err := out(cmd).Write(data)
 		return err
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := writeFileAtomic(path, data); err != nil {
 		return err
 	}
 	fmt.Fprintf(errOut(cmd), "wrote %d bytes to %s\n", len(data), path)
 	return nil
+}
+
+// writeFileAtomic writes data to path via a temp file in the same directory,
+// then renames it into place. An export that fails partway — a full disk, a
+// canceled request, a crash — leaves the previous file untouched rather than
+// truncated, and readers never observe a partial export.
+func writeFileAtomic(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer func() {
+		// No-ops once the rename has succeeded.
+		f.Close()
+		os.Remove(tmp)
+	}()
+
+	if _, err := f.Write(data); err != nil {
+		return err
+	}
+	// Durability before the rename: a rename that wins the race to disk ahead
+	// of the data would publish an empty file after a crash.
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	// CreateTemp makes 0600; exports are ordinary files.
+	if err := os.Chmod(tmp, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // errOut returns the writer for diagnostics that should not pollute stdout
