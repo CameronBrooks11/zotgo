@@ -12,6 +12,7 @@ import (
 
 	"github.com/urfave/cli/v3"
 
+	"github.com/CameronBrooks11/zotgo/internal/output"
 	"github.com/CameronBrooks11/zotgo/internal/render"
 	"github.com/CameronBrooks11/zotgo/internal/zotero"
 )
@@ -34,7 +35,7 @@ func exportCommand() *cli.Command {
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			format := strings.ToLower(cmd.Args().First())
 			if format == "" {
-				return fmt.Errorf("missing format (usage: zot export <bibtex|csljson|json|csv|md>)")
+				return fmt.Errorf("missing format (usage: zot export <%s>)", strings.Join(allFormats(), "|"))
 			}
 
 			c, lib, err := resolveLibrary(ctx, cmd)
@@ -64,10 +65,21 @@ func exportCommand() *cli.Command {
 // localFormats are shaped by zotgo rather than by a Zotero translator. They are
 // named apart from the translators so that `csv` unambiguously means Zotero's
 // own CSV, not zotgo's summary table.
-var localFormats = map[string]func(*strings.Builder, []zotero.Envelope) error{
-	"json":        func(b *strings.Builder, items []zotero.Envelope) error { return render.JSON(b, items) },
-	"summary-csv": func(b *strings.Builder, items []zotero.Envelope) error { return render.CSV(b, items) },
-	"summary-md":  func(b *strings.Builder, items []zotero.Envelope) error { return render.Markdown(b, items) },
+//
+// `json` emits the same versioned Document as `--json`, so an exported file and
+// a piped command carry identical shapes.
+var localFormats = map[string]func(*strings.Builder, zotero.LibraryRef, []zotero.Envelope) error{
+	"json": func(b *strings.Builder, lib zotero.LibraryRef, items []zotero.Envelope) error {
+		doc := output.NewDocument(output.KindItems, output.NewLibrary(lib), output.NewItems(items)).
+			WithMeta(len(items), len(items))
+		return output.WriteJSON(b, doc)
+	},
+	"summary-csv": func(b *strings.Builder, _ zotero.LibraryRef, items []zotero.Envelope) error {
+		return render.CSV(b, items)
+	},
+	"summary-md": func(b *strings.Builder, _ zotero.LibraryRef, items []zotero.Envelope) error {
+		return render.Markdown(b, items)
+	},
 }
 
 // formatAliases spell shorthands used on the command line.
@@ -90,7 +102,7 @@ func renderExport(ctx context.Context, c *zotero.Client, lib zotero.LibraryRef, 
 			return nil, friendly(err)
 		}
 		var buf strings.Builder
-		if err := shape(&buf, items); err != nil {
+		if err := shape(&buf, lib, items); err != nil {
 			return nil, err
 		}
 		return []byte(buf.String()), nil

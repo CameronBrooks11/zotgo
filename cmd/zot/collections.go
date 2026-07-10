@@ -5,6 +5,7 @@ import (
 
 	"github.com/urfave/cli/v3"
 
+	"github.com/CameronBrooks11/zotgo/internal/output"
 	"github.com/CameronBrooks11/zotgo/internal/render"
 	"github.com/CameronBrooks11/zotgo/internal/zotero"
 )
@@ -26,9 +27,14 @@ func collectionsCommand() *cli.Command {
 			if err != nil {
 				return friendly(err)
 			}
+			mode, err := outputMode(cmd)
+			if err != nil {
+				return err
+			}
 			w := out(cmd)
-			if cmd.Bool("json") {
-				return render.JSON(w, cols)
+			if mode != output.ModeHuman {
+				return emitSet(w, mode, output.KindCollections, output.KindCollection,
+					output.NewLibrary(lib), output.NewCollections(cols), len(cols), len(cols), cols)
 			}
 			render.Collections(w, cols, cmd.Bool("flat"))
 			return nil

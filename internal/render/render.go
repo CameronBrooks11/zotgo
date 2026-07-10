@@ -1,10 +1,10 @@
-// Package render turns zotero client values into terminal output: aligned tables
-// for humans and indented JSON for machines. It holds no I/O or network logic —
-// every function writes to an io.Writer so output is easy to test and redirect.
+// Package render turns zotero client values into terminal output for humans:
+// aligned tables and detail views. Machine-readable output is internal/output's
+// job. render holds no I/O or network logic — every function writes to an
+// io.Writer so output is easy to test and redirect.
 package render
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -13,13 +13,6 @@ import (
 
 	"github.com/CameronBrooks11/zotgo/internal/zotero"
 )
-
-// JSON writes v as indented JSON.
-func JSON(w io.Writer, v any) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(v)
-}
 
 // Items writes a one-line-per-item table: key, type, title, creator, date.
 func Items(w io.Writer, items []zotero.Envelope) {
