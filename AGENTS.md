@@ -80,6 +80,12 @@ should be called out in the plan doc until a live run confirms it.
   (`internal/zotero`) are *not* a contract: they reach users only through
   `--raw`, which is explicitly unversioned. Never widen `--json` to pass a
   Zotero field through unshaped — model it as a DTO field instead.
+- **Versions are endpoint-scoped; the DTOs carry none.** A Zotero object version
+  is only meaningful within the endpoint that issued it, and must never travel to
+  another one. The Local API's version is the *server* version, so it does not
+  move on unsynced local edits, and zotero/zotero#5015 will redefine it as a
+  local counter. Do not re-add `version` to a DTO until it has a defined,
+  endpoint-scoped meaning — which is a v0.5 (Web profile) concern, not a v0.3 one.
 
 ## Layout
 
