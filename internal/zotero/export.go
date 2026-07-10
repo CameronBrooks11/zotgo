@@ -66,7 +66,10 @@ func (c *Client) exportPages(ctx context.Context, library LibraryRef, opts Items
 		}
 		pages = append(pages, body)
 
-		start, more := nextStart(page.NextURL)
+		start, more, err := nextStart(page.NextURL, opts.Start)
+		if err != nil {
+			return nil, err
+		}
 		if !more {
 			return pages, nil
 		}

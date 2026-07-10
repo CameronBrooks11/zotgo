@@ -8,6 +8,10 @@ import (
 var (
 	// ErrZoteroDown means the local HTTP server could not be reached.
 	ErrZoteroDown = errors.New("zotero is not running")
+	// ErrBadPagination means Zotero advertised a rel="next" cursor that cannot
+	// be followed: no start offset, an unparseable one, or one that does not
+	// advance. Following it would loop forever.
+	ErrBadPagination = errors.New("zotero returned an unusable pagination cursor")
 	// ErrLocalAPIDisabled means Zotero is running, but the Local API pref is off.
 	ErrLocalAPIDisabled = errors.New("zotero local api is disabled")
 	// ErrNotFound means Zotero returned 404 for a requested object.

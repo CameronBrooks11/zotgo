@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -71,7 +72,10 @@ func (c *Client) AllItems(ctx context.Context, library LibraryRef, opts ItemsOpt
 			return nil, err
 		}
 		all = append(all, items...)
-		start, more := nextStart(page.NextURL)
+		start, more, err := nextStart(page.NextURL, opts.Start)
+		if err != nil {
+			return nil, err
+		}
 		if !more {
 			return all, nil
 		}
@@ -117,7 +121,10 @@ func (c *Client) AllCollections(ctx context.Context, library LibraryRef, opts Co
 			return nil, err
 		}
 		all = append(all, cols...)
-		start, more := nextStart(page.NextURL)
+		start, more, err := nextStart(page.NextURL, opts.Start)
+		if err != nil {
+			return nil, err
+		}
 		if !more {
 			return all, nil
 		}
@@ -218,18 +225,33 @@ func pageFromHeader(h http.Header) Page {
 	}
 }
 
-// nextStart extracts the start offset from a Link rel="next" URL. The second
-// return is false when there is no further page.
-func nextStart(nextURL string) (int, bool) {
+// nextStart extracts the start offset from a Link rel="next" URL, given the
+// offset of the page that produced it. The second return is false when there is
+// no further page.
+//
+// A cursor that is absent, unparseable, or does not advance past cur yields
+// ErrBadPagination: a caller that followed it would request the same page
+// forever.
+func nextStart(nextURL string, cur int) (int, bool, error) {
 	if nextURL == "" {
-		return 0, false
+		return 0, false, nil
 	}
 	u, err := url.Parse(nextURL)
 	if err != nil {
-		return 0, false
+		return 0, false, fmt.Errorf("%w: %q: %w", ErrBadPagination, nextURL, err)
 	}
-	start, _ := strconv.Atoi(u.Query().Get("start"))
-	return start, true
+	raw := u.Query().Get("start")
+	if raw == "" {
+		return 0, false, fmt.Errorf("%w: no start offset in %q", ErrBadPagination, nextURL)
+	}
+	start, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, false, fmt.Errorf("%w: start=%q is not a number", ErrBadPagination, raw)
+	}
+	if start <= cur {
+		return 0, false, fmt.Errorf("%w: start=%d does not advance past %d", ErrBadPagination, start, cur)
+	}
+	return start, true, nil
 }
 
 func linkRel(header, rel string) string {
