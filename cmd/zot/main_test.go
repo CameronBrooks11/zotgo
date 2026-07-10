@@ -42,6 +42,17 @@ func fakeZotero(localAPIEnabled bool) *httptest.Server {
 		case "csljson":
 			_, _ = w.Write([]byte(`[{"id":"AAAA1111","type":"article-journal"}]`))
 			return
+		case "csv":
+			// Zotero's native CSV, distinct from zotgo's summary-csv.
+			w.Header().Set("Content-Type", "text/csv")
+			_, _ = w.Write([]byte("Key,Item Type,Title\nAAAA1111,journalArticle,Algae paper\n"))
+			return
+		case "ris":
+			_, _ = w.Write([]byte("TY  - JOUR\nTI  - Algae paper\nER  -\n"))
+			return
+		case "mods":
+			_, _ = w.Write([]byte(`<modsCollection><mods/></modsCollection>`))
+			return
 		}
 		w.Header().Set("Total-Results", "2")
 		w.Header().Set("Zotero-Schema-Version", "42")
@@ -234,15 +245,57 @@ func TestExportBibtex(t *testing.T) {
 	}
 }
 
-func TestExportCSV(t *testing.T) {
+// summary-csv is zotgo's own shape, built from item envelopes.
+func TestExportSummaryCSV(t *testing.T) {
+	srv := fakeZotero(true)
+	defer srv.Close()
+	out, _, err := runCLI(srv.URL, "export", "summary-csv")
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if !strings.HasPrefix(out, "key,type,title") || !strings.Contains(out, "AAAA1111") {
+		t.Errorf("summary-csv output unexpected:\n%s", out)
+	}
+}
+
+// Plain `csv` now means Zotero's own translator, not zotgo's summary.
+func TestExportNativeCSV(t *testing.T) {
 	srv := fakeZotero(true)
 	defer srv.Close()
 	out, _, err := runCLI(srv.URL, "export", "csv")
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
-	if !strings.HasPrefix(out, "key,type,title") || !strings.Contains(out, "AAAA1111") {
-		t.Errorf("csv output unexpected:\n%s", out)
+	if !strings.HasPrefix(out, "Key,Item Type,Title") {
+		t.Errorf("expected Zotero's native csv header, got:\n%s", out)
+	}
+}
+
+// A translator zotgo never had a bespoke method for now works generically.
+func TestExportRIS(t *testing.T) {
+	srv := fakeZotero(true)
+	defer srv.Close()
+	out, _, err := runCLI(srv.URL, "export", "ris")
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if !strings.Contains(out, "TY  - JOUR") {
+		t.Errorf("ris output unexpected:\n%s", out)
+	}
+}
+
+// md and markdown still resolve, now to summary-md.
+func TestExportMarkdownAlias(t *testing.T) {
+	srv := fakeZotero(true)
+	defer srv.Close()
+	for _, alias := range []string{"md", "markdown", "summary-md"} {
+		out, _, err := runCLI(srv.URL, "export", alias)
+		if err != nil {
+			t.Fatalf("%s: err = %v", alias, err)
+		}
+		if !strings.Contains(out, "Algae paper") {
+			t.Errorf("%s output unexpected:\n%s", alias, out)
+		}
 	}
 }
 

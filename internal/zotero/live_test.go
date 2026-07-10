@@ -1,6 +1,6 @@
 //go:build live
 
-// Live tests exercise the SDK against a real, running Zotero with the Local API
+// Live tests exercise the client against a real, running Zotero with the Local API
 // enabled. They are excluded from normal builds and CI; run them locally with:
 //
 //	go test -tags live ./internal/zotero -run TestLive -v

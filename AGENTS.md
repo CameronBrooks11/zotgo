@@ -6,13 +6,17 @@ project. Tool-specific files (for example the root `CLAUDE.md`) point here.
 
 ## What this project is
 
-`zotgo` (`zot` on the command line) is a zero-dependency Go binary and small SDK
-for a running [Zotero](https://www.zotero.org/) 7+ desktop app.
+`zotgo` (`zot` on the command line) is a zero-dependency Go binary for a running
+[Zotero](https://www.zotero.org/) 7+ desktop app.
 
 - **Reads** go through Zotero's **Local API** (`/api/*`, Zotero 7+, off by
   default). Read-only, Web-API-v3 compatible.
-- **Writes** are opt-in and go through Zotero's **Connector API**
-  (`/connector/*`). Item creation is Zotero's responsibility, not zotgo's.
+- **Writes** do not exist yet. The Local API is read-only today, and zotgo waits
+  for Zotero's official write contract rather than reaching around it. The
+  **Connector API** (`/connector/*`) is reserved for *ingestion* — where Zotero
+  performs an app-level workflow such as PDF recognition or import — and is
+  never a general write backend: its save target is whatever library the user
+  happens to have selected.
 - `zotero.sqlite` is **never** opened. Talking to the app over its own HTTP
   contracts — not its database — is the reason this project exists.
 
@@ -22,7 +26,7 @@ attribution obligation. Licensed AGPL-3.0.
 ## Environment and commands
 
 Requires [Go](https://go.dev/) 1.23+ and [`just`](https://github.com/casey/just).
-The SDK (`internal/zotero`) and rendering (`internal/render`) use only the
+The client (`internal/zotero`) and rendering (`internal/render`) use only the
 standard library; third-party Go modules are confined to the CLI layer
 (`urfave/cli/v3`) and justified one at a time.
 
@@ -45,10 +49,12 @@ Always run `just check` and `just test` before committing. Both must be green.
 - Code style: edit only what a change needs; do not refactor or re-comment
   untouched code. Keep the runtime dependency set at the standard library unless
   there is a clear, justified reason to add a module.
-- **Never open `zotero.sqlite`.** All reads go through the Local API client and
-  all writes through the Connector client, both under `internal/zotero/`.
-- The SDK (`internal/zotero`) stays free of CLI concerns and third-party CLI
-  deps, so it can be reused independently of the command layer.
+- **Never open `zotero.sqlite`.** All reads go through the Local API client
+  under `internal/zotero/`. If a capability is not exposed over HTTP, zotgo does
+  without it rather than cracking the database.
+- The client (`internal/zotero`) stays free of CLI concerns and third-party CLI
+  deps, so the command layer stays a thin shell over it. It is an `internal/`
+  package, not a published SDK: nothing outside this module can import it.
 - No cgo: builds are `CGO_ENABLED=0` static binaries.
 
 ## Layout
@@ -56,7 +62,7 @@ Always run `just check` and `just test` before committing. Both must be green.
 ```text
 cmd/zot/          CLI entry point (urfave/cli commands; one file per command)
 internal/
-  zotero/         the SDK — HTTP client for the Local API + Connector API
+  zotero/         HTTP client for Zotero's Local API (+ Connector ping)
   render/          table + JSON output (stdlib only, no network)
 working/          local planning docs (gitignored)
 _reference/       pyzot + zotero upstream, for mining (gitignored)

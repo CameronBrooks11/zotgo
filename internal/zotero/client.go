@@ -1,8 +1,11 @@
-// Package zotero is zotgo's SDK for a running Zotero 7+ desktop app.
+// Package zotero is zotgo's client for a running Zotero 7+ desktop app.
 //
-// It speaks only Zotero's own HTTP contracts — the Local API (/api/*) for
-// reads and the Connector API (/connector/*) for writes — and never opens
-// zotero.sqlite. The package depends on the standard library alone.
+// It speaks only Zotero's own HTTP contracts — today the Local API (/api/*),
+// which is read-only — and never opens zotero.sqlite. The package depends on
+// the standard library alone.
+//
+// This is an internal package, not a published SDK: it cannot be imported from
+// outside this module, and its API is free to change with zotgo's needs.
 package zotero
 
 import (
@@ -24,17 +27,49 @@ type Client struct {
 	http    *http.Client
 }
 
+// DefaultTimeout bounds a single Local API round-trip, body included.
+const DefaultTimeout = 5 * time.Second
+
+// An Option configures a Client at construction.
+type Option func(*Client)
+
+// WithHTTPClient makes the Client issue its requests through h, which carries
+// the transport, redirect policy, and timeout. Use it to supply a custom
+// transport for retries, tracing, or tests. A nil h is ignored.
+//
+// The Client copies h, so later changes to the caller's value — including those
+// made by WithTimeout — do not affect it.
+func WithHTTPClient(h *http.Client) Option {
+	return func(c *Client) {
+		if h == nil {
+			return
+		}
+		cp := *h
+		c.http = &cp
+	}
+}
+
+// WithTimeout bounds each round-trip. It overrides any timeout carried by a
+// client passed to WithHTTPClient, so pass it afterwards to take effect.
+func WithTimeout(d time.Duration) Option {
+	return func(c *Client) { c.http.Timeout = d }
+}
+
 // New returns a Client targeting baseURL, or DefaultBaseURL when baseURL is
-// empty.
-func New(baseURL string) *Client {
+// empty. Options are applied in order.
+func New(baseURL string, opts ...Option) *Client {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
 	baseURL = strings.TrimRight(baseURL, "/")
-	return &Client{
+	c := &Client{
 		baseURL: baseURL,
-		http:    &http.Client{Timeout: 5 * time.Second},
+		http:    &http.Client{Timeout: DefaultTimeout},
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 // BaseURL reports the address the client targets.

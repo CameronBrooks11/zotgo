@@ -37,6 +37,32 @@ jobs:
       - uses: extractions/setup-just@v4
       - run: just test
 
+  # The race detector on one platform; the matrix above covers portability.
+  race:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: extractions/setup-just@v4
+      - run: just test-race
+
+  # govulncheck reports standard-library vulnerabilities against the toolchain
+  # that builds the code, so this job tracks current Go rather than the minimum
+  # version in go.mod.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: true
+      - uses: extractions/setup-just@v4
+      - run: just vuln
+
   # Prove the release pipeline (incl. Windows/arm64 cross-builds) on every run,
   # without publishing anything.
   release-snapshot:
