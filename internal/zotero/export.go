@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -101,12 +102,24 @@ func mergeJSONArray(_ string, pages [][]byte) ([]byte, error) {
 	return json.MarshalIndent(merged, "", "  ")
 }
 
+// utf8BOM prefixes every page of Zotero's native CSV so spreadsheet software
+// reads the file as UTF-8. encoding/csv does not treat it specially: it becomes
+// part of the first header field, and the quote that follows then looks like a
+// bare quote in an unquoted field. Strip it per page, re-emit it once.
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
+
 // mergeCSV keeps the first page's header and drops the one repeating at the top
 // of every later page. The rows are parsed rather than split on newlines, since
 // a quoted field may contain one.
+//
+// A later page's first row is dropped only when it actually equals the header.
+// Zotero repeats it on every page today, but dropping unconditionally would
+// silently delete a real item the day it stops.
 func mergeCSV(_ string, pages [][]byte) ([]byte, error) {
 	var out [][]string
+	var header []string
 	for i, p := range pages {
+		p = bytes.TrimPrefix(p, utf8BOM)
 		if len(bytes.TrimSpace(p)) == 0 {
 			continue
 		}
@@ -117,13 +130,20 @@ func mergeCSV(_ string, pages [][]byte) ([]byte, error) {
 		if len(records) == 0 {
 			continue
 		}
-		if len(out) > 0 {
-			records = records[1:] // Drop the repeated header.
+		if header == nil {
+			header = records[0]
+		} else if slices.Equal(records[0], header) {
+			records = records[1:]
 		}
 		out = append(out, records...)
 	}
 
+	if len(out) == 0 {
+		return nil, nil
+	}
+
 	var buf bytes.Buffer
+	buf.Write(utf8BOM)
 	w := csv.NewWriter(&buf)
 	if err := w.WriteAll(out); err != nil {
 		return nil, err

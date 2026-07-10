@@ -47,7 +47,8 @@ func fakeZotero(localAPIEnabled bool) *httptest.Server {
 		case "csv":
 			// Zotero's native CSV, distinct from zotgo's summary-csv.
 			w.Header().Set("Content-Type", "text/csv")
-			_, _ = w.Write([]byte("Key,Item Type,Title\nAAAA1111,journalArticle,Algae paper\n"))
+			// Zotero's CSV translator prefixes every page with a UTF-8 BOM.
+			_, _ = w.Write([]byte("\ufeff\"Key\",\"Item Type\",\"Title\"\n\"AAAA1111\",\"journalArticle\",\"Algae paper\"\n"))
 			return
 		case "ris":
 			_, _ = w.Write([]byte("TY  - JOUR\nTI  - Algae paper\nER  -\n"))
@@ -567,7 +568,12 @@ func TestExportNativeCSV(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
-	if !strings.HasPrefix(out, "Key,Item Type,Title") {
+	// Zotero emits a UTF-8 BOM so spreadsheets detect the encoding; zotgo
+	// rejoins pages without stripping it from the document.
+	if !strings.HasPrefix(out, "\ufeff") {
+		t.Errorf("native csv lost Zotero's UTF-8 BOM:\n%q", out)
+	}
+	if !strings.HasPrefix(strings.TrimPrefix(out, "\ufeff"), "Key,Item Type,Title") {
 		t.Errorf("expected Zotero's native csv header, got:\n%s", out)
 	}
 }
