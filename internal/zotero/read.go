@@ -32,6 +32,10 @@ type ItemsOptions struct {
 	Query      string
 	Everything bool
 	ItemType   string
+	// ItemKeys restricts the result to these item keys (`itemKey=`). Combined
+	// with Top it selects exactly those items; on the unfiltered /items route
+	// Zotero also returns their children.
+	ItemKeys []string
 }
 
 // CollectionsOptions controls collection-list requests.
@@ -154,6 +158,9 @@ func itemValues(opts ItemsOptions) url.Values {
 		if tag != "" {
 			v.Add("tag", tag)
 		}
+	}
+	if len(opts.ItemKeys) > 0 {
+		v.Set("itemKey", strings.Join(opts.ItemKeys, ","))
 	}
 	if len(v) == 0 {
 		return nil

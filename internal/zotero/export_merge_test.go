@@ -1,6 +1,7 @@
 package zotero
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"errors"
@@ -37,26 +38,49 @@ func exportAll(t *testing.T, srv *httptest.Server, format string) ([]byte, error
 	return New(srv.URL).Export(context.Background(), UserLibrary(), ItemsOptions{Top: true}, format)
 }
 
-// Zotero's native CSV repeats its header on every page. The merged document
-// must carry exactly one.
-func TestExport_NativeCSVKeepsOneHeader(t *testing.T) {
-	page := "Key,Title\n%s,%s\n"
-	srv := pagedFormatServer(t, []string{
-		fmt.Sprintf(page, "AAAA", "Alpha"),
-		fmt.Sprintf(page, "BBBB", "Beta"),
-	})
+// csvPage renders a page the way Zotero's CSV translator really does: a UTF-8
+// BOM, then quoted fields. The BOM is the part that matters — without it these
+// tests pass against a document Zotero never sends.
+func csvPage(rows ...string) string {
+	return "\ufeff" + strings.Join(rows, "\n") + "\n"
+}
 
-	got, err := exportAll(t, srv, "csv")
-	if err != nil {
-		t.Fatalf("Export: %v", err)
+// parseMergedCSV asserts the merged document carries exactly one leading BOM,
+// then parses what follows.
+func parseMergedCSV(t *testing.T, got []byte) [][]string {
+	t.Helper()
+	if !bytes.HasPrefix(got, utf8BOM) {
+		t.Fatalf("merged csv lost Zotero's UTF-8 BOM: %q", truncate(got))
 	}
-
-	records, err := csv.NewReader(strings.NewReader(string(got))).ReadAll()
+	rest := bytes.TrimPrefix(got, utf8BOM)
+	if bytes.Contains(rest, utf8BOM) {
+		t.Fatalf("merged csv carries a BOM from a later page: %q", truncate(got))
+	}
+	records, err := csv.NewReader(bytes.NewReader(rest)).ReadAll()
 	if err != nil {
 		t.Fatalf("merged csv does not parse: %v\n%s", err, got)
 	}
+	return records
+}
+
+func truncate(b []byte) string {
+	if len(b) > 200 {
+		return string(b[:200]) + "…"
+	}
+	return string(b)
+}
+
+// Zotero's native CSV repeats its header on every page. The merged document
+// must carry exactly one.
+func TestExport_NativeCSVKeepsOneHeader(t *testing.T) {
+	srv := pagedFormatServer(t, []string{
+		csvPage(`"Key","Title"`, `"AAAA","Alpha"`),
+		csvPage(`"Key","Title"`, `"BBBB","Beta"`),
+	})
+
+	records := parseMergedCSV(t, mustExport(t, srv, "csv"))
 	if len(records) != 3 {
-		t.Fatalf("got %d records, want header + 2 rows:\n%s", len(records), got)
+		t.Fatalf("got %d records, want header + 2 rows: %v", len(records), records)
 	}
 	if records[0][0] != "Key" {
 		t.Fatalf("first record is not the header: %v", records[0])
@@ -71,24 +95,43 @@ func TestExport_NativeCSVKeepsOneHeader(t *testing.T) {
 // A CSV field containing an embedded newline must not confuse header stripping.
 func TestExport_NativeCSVHandlesQuotedNewlines(t *testing.T) {
 	srv := pagedFormatServer(t, []string{
-		"Key,Title\nAAAA,\"Alpha\nwrapped\"\n",
-		"Key,Title\nBBBB,Beta\n",
+		csvPage(`"Key","Title"`, "\"AAAA\",\"Alpha\nwrapped\""),
+		csvPage(`"Key","Title"`, `"BBBB","Beta"`),
 	})
 
-	got, err := exportAll(t, srv, "csv")
-	if err != nil {
-		t.Fatalf("Export: %v", err)
-	}
-	records, err := csv.NewReader(strings.NewReader(string(got))).ReadAll()
-	if err != nil {
-		t.Fatalf("merged csv does not parse: %v\n%s", err, got)
-	}
+	records := parseMergedCSV(t, mustExport(t, srv, "csv"))
 	if len(records) != 3 {
-		t.Fatalf("got %d records, want 3:\n%s", len(records), got)
+		t.Fatalf("got %d records, want 3: %v", len(records), records)
 	}
 	if records[1][1] != "Alpha\nwrapped" {
 		t.Fatalf("embedded newline mangled: %q", records[1][1])
 	}
+}
+
+// If a later page does not repeat the header, its first row is a real item.
+// Dropping it unconditionally would silently lose data.
+func TestExport_NativeCSVKeepsFirstRowWhenHeaderNotRepeated(t *testing.T) {
+	srv := pagedFormatServer(t, []string{
+		csvPage(`"Key","Title"`, `"AAAA","Alpha"`),
+		csvPage(`"BBBB","Beta"`), // no header on this page
+	})
+
+	records := parseMergedCSV(t, mustExport(t, srv, "csv"))
+	if len(records) != 3 {
+		t.Fatalf("got %d records, want header + 2 rows (an item was dropped): %v", len(records), records)
+	}
+	if records[2][0] != "BBBB" {
+		t.Fatalf("second page's item was dropped as a header: %v", records)
+	}
+}
+
+func mustExport(t *testing.T, srv *httptest.Server, format string) []byte {
+	t.Helper()
+	got, err := exportAll(t, srv, format)
+	if err != nil {
+		t.Fatalf("Export(%s): %v", format, err)
+	}
+	return got
 }
 
 // One page of XML is fine: pass it straight through.
