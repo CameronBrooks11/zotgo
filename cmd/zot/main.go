@@ -94,7 +94,8 @@ func resolveLibrary(ctx context.Context, cmd *cli.Command) (*zotero.Client, zote
 	return c, lib, nil
 }
 
-// friendly turns the SDK's connectivity sentinels into actionable CLI messages.
+// friendly turns the client's connectivity sentinels into actionable CLI
+// messages.
 func friendly(err error) error {
 	switch {
 	case errors.Is(err, zotero.ErrZoteroDown):

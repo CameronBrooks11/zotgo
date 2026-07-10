@@ -6,8 +6,8 @@ conventions.
 
 Key reminders:
 
-- zotgo talks to a **running Zotero 7+** over HTTP (Local API for reads,
-  Connector API for writes). **Never** open `zotero.sqlite`.
+- zotgo talks to a **running Zotero 7+** over HTTP (Local API for reads; the
+  Local API is read-only today). **Never** open `zotero.sqlite`.
 - Run `just check` and `just test` before every commit; both must be green.
-- Conventional Commits; keep the SDK (`internal/zotero`) dependency-light and
-  free of CLI concerns.
+- Conventional Commits; keep the client (`internal/zotero`) dependency-light
+  and free of CLI concerns.

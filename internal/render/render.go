@@ -1,4 +1,4 @@
-// Package render turns zotero SDK values into terminal output: aligned tables
+// Package render turns zotero client values into terminal output: aligned tables
 // for humans and indented JSON for machines. It holds no I/O or network logic —
 // every function writes to an io.Writer so output is easy to test and redirect.
 package render

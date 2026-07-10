@@ -1,8 +1,11 @@
-// Package zotero is zotgo's SDK for a running Zotero 7+ desktop app.
+// Package zotero is zotgo's client for a running Zotero 7+ desktop app.
 //
-// It speaks only Zotero's own HTTP contracts — the Local API (/api/*) for
-// reads and the Connector API (/connector/*) for writes — and never opens
-// zotero.sqlite. The package depends on the standard library alone.
+// It speaks only Zotero's own HTTP contracts — today the Local API (/api/*),
+// which is read-only — and never opens zotero.sqlite. The package depends on
+// the standard library alone.
+//
+// This is an internal package, not a published SDK: it cannot be imported from
+// outside this module, and its API is free to change with zotgo's needs.
 package zotero
 
 import (
