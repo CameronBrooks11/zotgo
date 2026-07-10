@@ -22,13 +22,26 @@ fmt-check:
 lint:
     go vet ./...
 
-# CI-equivalent gate: formatting, vet, and a full compile (Go's type check)
-check: fmt-check lint
+# staticcheck: the analyses `go vet` does not carry
+staticcheck:
+    go run honnef.co/go/tools/cmd/staticcheck@2025.1.1 ./...
+
+# CI-equivalent gate: formatting, vet, staticcheck, and a full compile
+check: fmt-check lint staticcheck
     go build ./...
 
 # Run the test suite
 test:
     go test ./...
+
+# Run the test suite under the race detector
+test-race:
+    go test -race ./...
+
+# Report known vulnerabilities reachable from our code. Stdlib findings track
+# the toolchain that builds them, so run this on a current Go.
+vuln:
+    go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
 
 # Build the zot binary into ./bin
 build:

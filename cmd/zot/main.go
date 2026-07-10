@@ -100,6 +100,7 @@ func friendly(err error) error {
 	case errors.Is(err, zotero.ErrZoteroDown):
 		return errors.New("cannot reach Zotero — is the desktop app running? (try `zot doctor`)")
 	case errors.Is(err, zotero.ErrLocalAPIDisabled):
+		//lint:ignore ST1005 "Zotero" is a proper noun.
 		return errors.New("Zotero's Local API is disabled — run `zot doctor` for setup steps")
 	}
 	return err
