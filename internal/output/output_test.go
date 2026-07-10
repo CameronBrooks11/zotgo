@@ -36,8 +36,8 @@ func itemEnvelope() zotero.Envelope {
 func TestNewItem_FlattensEnvelope(t *testing.T) {
 	got := NewItem(itemEnvelope())
 
-	if got.Key != "AAAA1111" || got.Version != 7 {
-		t.Fatalf("key/version = %q/%d", got.Key, got.Version)
+	if got.Key != "AAAA1111" {
+		t.Fatalf("key = %q", got.Key)
 	}
 	if got.Type != "journalArticle" || got.Title != "Algae paper" {
 		t.Fatalf("type/title = %q/%q", got.Type, got.Title)
@@ -103,8 +103,31 @@ func TestNewItem_EmptySlicesAreNotNull(t *testing.T) {
 // A malformed data payload must not lose the envelope's trustworthy fields.
 func TestNewItem_MalformedDataKeepsEnvelopeFields(t *testing.T) {
 	got := NewItem(zotero.Envelope{Key: "K", Version: 3, Data: json.RawMessage(`"not an object"`)})
-	if got.Key != "K" || got.Version != 3 {
+	if got.Key != "K" {
 		t.Fatalf("envelope fields lost: %+v", got)
+	}
+}
+
+// The DTO contract deliberately carries no object version: a Zotero version is
+// scoped to the endpoint that issued it, and the Local API's has no durable
+// meaning (see the comment on Item). Consumers who need it use --raw.
+func TestDTOs_CarryNoObjectVersion(t *testing.T) {
+	item, err := json.Marshal(NewItem(itemEnvelope()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	coll, err := json.Marshal(NewCollection(zotero.Envelope{
+		Key:     "C",
+		Version: 4,
+		Data:    json.RawMessage(`{"name":"N","parentCollection":false}`),
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, doc := range [][]byte{item, coll} {
+		if bytes.Contains(doc, []byte(`"version"`)) {
+			t.Errorf("DTO exposes an endpoint-scoped version: %s", doc)
+		}
 	}
 }
 
@@ -116,7 +139,7 @@ func TestNewCollection(t *testing.T) {
 		Data:    json.RawMessage(`{"key":"COLL0002","name":"Polyhedra","parentCollection":"COLL0001"}`),
 	}
 	got := NewCollection(e)
-	want := Collection{Key: "COLL0002", Version: 4, Name: "Polyhedra", ParentKey: "COLL0001", NumItems: 9}
+	want := Collection{Key: "COLL0002", Name: "Polyhedra", ParentKey: "COLL0001", NumItems: 9}
 	if got != want {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}

@@ -10,7 +10,11 @@ package output
 // SchemaVersion identifies the DTO contract. Bump it when a field changes
 // meaning or disappears; adding a field is not a breaking change, and consumers
 // are expected to ignore fields they do not know.
-const SchemaVersion = 1
+//
+// 2: dropped Item.Version and Collection.Version. An object version is scoped to
+// the endpoint that issued it, and the Local API's versions have no durable
+// meaning zotgo can promise (see dto.go).
+const SchemaVersion = 2
 
 // Kind discriminates a Document's payload.
 type Kind string

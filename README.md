@@ -105,7 +105,7 @@ for every command, so a script learns it once:
 
 ```json
 {
-  "schema": 1,
+  "schema": 2,
   "kind": "items",
   "library": { "type": "user", "id": 0, "name": "My Library" },
   "data": [ { "key": "AAAA1111", "type": "journalArticle", "title": "Algae paper" } ],
@@ -118,6 +118,15 @@ for every command, so a script learns it once:
 so a script can check for `write` support rather than assume it. `schema` is
 bumped only when a field changes meaning or disappears — new fields may appear at
 any time, so ignore the ones you don't know.
+
+Items and collections carry **no `version`**. A Zotero object version belongs to
+the endpoint that issued it, and the Local API's has no meaning zotgo can promise:
+it is the *server* version, so it does not move when you edit an item locally
+without syncing, and upstream
+[zotero/zotero#5015](https://github.com/zotero/zotero/issues/5015) will replace it
+with an unrelated local counter. Sending one to the Web API as a write
+precondition is a data-integrity hazard. If you need Zotero's number anyway, take
+it from `--raw`, which is explicitly outside this contract.
 
 `--jsonl` emits one document per line, each repeating `schema`, `kind`, and
 `library`. Every line therefore stands alone, and a stream survives being

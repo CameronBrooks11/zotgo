@@ -15,9 +15,24 @@ type Library struct {
 
 // Item is one Zotero item, flattened from the API's envelope/data/meta split
 // into the fields a script actually consumes.
+//
+// There is deliberately no version field. A Zotero object version is scoped to
+// the endpoint that issued it, and the Local API's version has no durable
+// meaning zotgo can promise:
+//
+//   - It is currently the *server* version, so it does not move when an item is
+//     edited locally and not yet synced — change detection on it is unsound.
+//   - Upstream zotero/zotero#5015 replaces it with a local clientVersion drawn
+//     from an unrelated counter, silently changing what the number means.
+//   - Feeding a local version to the Web API as a write precondition is a
+//     data-integrity hazard the Zotero maintainers call out directly.
+//
+// Exposing a number with those properties invites exactly the misuse it cannot
+// survive. `--raw` still carries Zotero's own version, unversioned and
+// explicitly outside this contract. A properly endpoint-scoped version returns
+// when writes do.
 type Item struct {
-	Key     string `json:"key"`
-	Version int    `json:"version"`
+	Key string `json:"key"`
 	// Type is Zotero's itemType, e.g. "journalArticle".
 	Type  string `json:"type"`
 	Title string `json:"title"`
@@ -57,10 +72,10 @@ type Tag struct {
 	Automatic bool   `json:"automatic"`
 }
 
-// Collection is one collection, with its parent's key when nested.
+// Collection is one collection, with its parent's key when nested. It carries no
+// version, for the reasons given on Item.
 type Collection struct {
 	Key       string `json:"key"`
-	Version   int    `json:"version"`
 	Name      string `json:"name"`
 	ParentKey string `json:"parentKey,omitempty"`
 	NumItems  int    `json:"numItems"`
@@ -143,7 +158,6 @@ func NewItem(e zotero.Envelope) Item {
 
 	return Item{
 		Key:            e.Key,
-		Version:        e.Version,
 		Type:           data.ItemType,
 		Title:          data.Title,
 		Date:           data.Date,
@@ -177,7 +191,6 @@ func NewCollection(e zotero.Envelope) Collection {
 	data, _ := e.CollectionData()
 	return Collection{
 		Key:       e.Key,
-		Version:   e.Version,
 		Name:      data.Name,
 		ParentKey: data.ParentKey(),
 		NumItems:  metaInt(e.Meta["numItems"]),

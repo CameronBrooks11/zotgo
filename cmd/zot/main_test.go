@@ -60,8 +60,8 @@ func fakeZotero(localAPIEnabled bool) *httptest.Server {
 		w.Header().Set("Total-Results", "2")
 		w.Header().Set("Zotero-Schema-Version", "42")
 		_, _ = w.Write([]byte(`[
-			{"key":"AAAA1111","data":{"key":"AAAA1111","itemType":"journalArticle","title":"Algae paper"},"meta":{"creatorSummary":"Posten","parsedDate":"2009"}},
-			{"key":"BBBB2222","data":{"key":"BBBB2222","itemType":"book","title":"A Book"},"meta":{"creatorSummary":"Author"}}
+			{"key":"AAAA1111","version":7,"data":{"key":"AAAA1111","version":7,"itemType":"journalArticle","title":"Algae paper"},"meta":{"creatorSummary":"Posten","parsedDate":"2009"}},
+			{"key":"BBBB2222","version":8,"data":{"key":"BBBB2222","version":8,"itemType":"book","title":"A Book"},"meta":{"creatorSummary":"Author"}}
 		]`))
 	}))
 	mux.HandleFunc("GET /api/users/0/items/{key}/children", guard(func(w http.ResponseWriter, _ *http.Request) {
@@ -205,10 +205,27 @@ func TestListJSON_DoesNotLeakZoteroEnvelope(t *testing.T) {
 	// Zotero names the field itemType and attaches links to every record; the DTO
 	// calls it type and carries no links. (The document's own "meta" is a zotgo
 	// field, so it is not a leak marker.)
-	for _, leak := range []string{`"itemType"`, `"links"`} {
+	//
+	// "version" is a leak marker too: an object version is scoped to the endpoint
+	// that issued it, so the DTO contract carries none.
+	for _, leak := range []string{`"itemType"`, `"links"`, `"version"`} {
 		if strings.Contains(out, leak) {
 			t.Errorf("Zotero envelope field %s leaked into --json:\n%s", leak, out)
 		}
+	}
+}
+
+// --raw is the escape hatch, so Zotero's own version must survive there. Without
+// this, dropping the field from the DTOs could be mistaken for dropping the data.
+func TestListRaw_KeepsZoteroVersion(t *testing.T) {
+	srv := fakeZotero(true)
+	defer srv.Close()
+	out, _, err := runCLI(srv.URL, "--raw", "list")
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if !strings.Contains(out, `"version": 7`) && !strings.Contains(out, `"version":7`) {
+		t.Errorf("--raw dropped Zotero's version:\n%s", out)
 	}
 }
 
