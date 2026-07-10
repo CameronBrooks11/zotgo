@@ -32,14 +32,32 @@ standard library; third-party Go modules are confined to the CLI layer
 
 - `just setup` — download + verify modules
 - `just fmt` — format (`gofmt -w`)
-- `just lint` — `go vet ./...`
-- `just check` — CI-equivalent gate: `gofmt` check + `go vet` + compile
+- `just lint` — `go vet ./...` and `go vet -tags live ./...`
+- `just check` — CI-equivalent gate: `gofmt` check + vet + staticcheck + compile
 - `just test` — `go test ./...`
+- `just test-race` — the suite under the race detector
+- `just test-live` — exercise a real, running Zotero (skips when it is absent)
+- `just vuln` — `govulncheck`; run it on a current Go, since standard-library
+  findings track the toolchain that builds them, not the code
 - `just build` — build the `zot` binary into `./bin`
 - `just run <args>` — run from source (e.g. `just run doctor`)
 - `just release-snapshot` — cross-platform dry-run build via goreleaser
 
 Always run `just check` and `just test` before committing. Both must be green.
+
+### The live suite
+
+Tests behind `//go:build live` talk to a real Zotero and never run in CI. They
+exist because the `httptest` fakes are seeded from shapes *we* captured, so they
+encode our reading of the API and cannot falsify it. The live tests decode
+Zotero's responses independently and compare.
+
+`just check` vets them under the build tag. Without that they compile only when
+someone remembers, and an API change rots them silently.
+
+Anything inferred from Zotero's behaviour rather than observed — how a translator
+paginates, what a field means — belongs in the live suite, and the inference
+should be called out in the plan doc until a live run confirms it.
 
 ## Conventions
 

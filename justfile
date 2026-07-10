@@ -18,9 +18,11 @@ fmt:
 fmt-check:
     @test -z "$(gofmt -l .)" || { echo "not gofmt-clean (run 'just fmt'):"; gofmt -l .; exit 1; }
 
-# Vet: static checks bundled with the Go toolchain
+# Vet: static checks bundled with the Go toolchain. The `live` suite is behind a
+# build tag, so it must be vetted explicitly or it silently rots.
 lint:
     go vet ./...
+    go vet -tags live ./...
 
 # staticcheck: the analyses `go vet` does not carry
 staticcheck:
@@ -37,6 +39,11 @@ test:
 # Run the test suite under the race detector
 test-race:
     go test -race ./...
+
+# Exercise a real, running Zotero with the Local API enabled. Not run in CI:
+# these tests skip themselves when Zotero is unreachable.
+test-live:
+    go test -tags live -count=1 -v ./... -run TestLive
 
 # Report known vulnerabilities reachable from our code. Stdlib findings track
 # the toolchain that builds them, so run this on a current Go.
