@@ -56,6 +56,12 @@ Always run `just check` and `just test` before committing. Both must be green.
   deps, so the command layer stays a thin shell over it. It is an `internal/`
   package, not a published SDK: nothing outside this module can import it.
 - No cgo: builds are `CGO_ENABLED=0` static binaries.
+- **The DTOs in `internal/output` are a contract.** Renaming a field, changing
+  its meaning, or removing it is a breaking change and must bump
+  `output.SchemaVersion`. Adding a field is not breaking. Zotero's own envelopes
+  (`internal/zotero`) are *not* a contract: they reach users only through
+  `--raw`, which is explicitly unversioned. Never widen `--json` to pass a
+  Zotero field through unshaped — model it as a DTO field instead.
 
 ## Layout
 
@@ -63,7 +69,8 @@ Always run `just check` and `just test` before committing. Both must be green.
 cmd/zot/          CLI entry point (urfave/cli commands; one file per command)
 internal/
   zotero/         HTTP client for Zotero's Local API (+ Connector ping)
-  render/          table + JSON output (stdlib only, no network)
+  output/         machine-readable contract: versioned DTOs + json/jsonl/raw
+  render/         human terminal output: tables and detail views
 working/          local planning docs (gitignored)
 _reference/       pyzot + zotero upstream, for mining (gitignored)
 ```
