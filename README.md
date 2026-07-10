@@ -1,16 +1,17 @@
 # zotgo (`zot`)
 
 A single, zero-dependency Go binary that drives a running
-[Zotero](https://www.zotero.org/) 7+ through its own HTTP contracts — the
-**Local API** (`/api/*`) for reads and the **Connector API** (`/connector/*`)
-for writes. It never opens `zotero.sqlite`.
+[Zotero](https://www.zotero.org/) 7+ through its own HTTP contracts — today the
+**Local API** (`/api/*`), which is read-only. It never opens `zotero.sqlite`.
 
 zotgo is the successor to [`pyzot`](https://github.com/CameronBrooks11/pyzot),
 rebuilt from scratch to talk to Zotero the way Zotero wants to be talked to:
 over HTTP, never through its database.
 
-> **Status: early (v0.2).** A working read-only CLI — browse, search, inspect,
-> and export your library. Write (`add`) commands land in subsequent milestones.
+> **Status: early (v0.2, with v0.3 on `main`).** A working read-only CLI —
+> browse, search, inspect, and export your library. Writes wait on Zotero's
+> official write contract; `zot doctor` reports which capabilities the endpoint
+> actually offers.
 
 ## How it works
 
@@ -37,13 +38,24 @@ zot doctor
 ```
 
 ```
-zot doctor — checking Zotero at http://localhost:23119
+zot doctor — checking the local endpoint at http://localhost:23119
 
   ✓ Zotero running  (v9.0.4)
   ✓ Local API enabled  (schema 42, API v3)
 
+Capabilities:
+  ✓ read
+  ✗ write  Zotero's Local API exposes no write endpoints (upstream: zotero/zotero#5015)
+  ✓ connector-ingest
+  ✓ local-file-access
+
 Ready. zotgo can read your library.
 ```
+
+`doctor` reports what the endpoint can do, not merely whether it answers. Every
+unsupported capability carries the reason, so there is always something to act
+on — or, for `write`, something to follow. `zot --json doctor` reports the same
+under `data.capabilities`, and exits non-zero when Zotero is unreachable.
 
 If the Local API is off, `doctor` prints the exact steps to enable it
 (Zotero → Settings → Advanced → "Allow other applications on this computer to
@@ -102,9 +114,10 @@ for every command, so a script learns it once:
 ```
 
 `kind` says what `data` holds: `items`, `item`, `collections`, `collection`,
-`stats`, or `health`. `schema` is bumped only when a field changes meaning or
-disappears — new fields may appear at any time, so ignore the ones you don't
-know.
+`stats`, or `health`. A `health` document carries `endpoint` and `capabilities`,
+so a script can check for `write` support rather than assume it. `schema` is
+bumped only when a field changes meaning or disappears — new fields may appear at
+any time, so ignore the ones you don't know.
 
 `--jsonl` emits one document per line, each repeating `schema`, `kind`, and
 `library`. Every line therefore stands alone, and a stream survives being
@@ -127,8 +140,10 @@ branch on the exit status without parsing the payload.
 Requires [Go](https://go.dev/) 1.23+ and [`just`](https://github.com/casey/just).
 
 ```bash
-just check   # gofmt + go vet + compile (CI gate)
-just test    # go test ./...
+just check      # gofmt + vet (incl. the live suite) + staticcheck + compile
+just test       # go test ./...
+just test-race  # the suite under the race detector
+just test-live  # exercise a real, running Zotero (skips when absent)
 just run doctor
 ```
 
