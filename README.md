@@ -62,12 +62,18 @@ zot collections               # collections as a tree (--flat for a list)
 zot stats                     # library-wide counts
 zot export bib -c Polyhedra   # BibTeX (from Zotero), scoped to a collection
 zot export csljson -o refs.json
-zot export csv                # also: json, md
+zot export ris                # any Zotero translator: ris, biblatex, csv, …
+zot export summary-md         # zotgo's own summary shapes: json, summary-csv
 ```
 
-`export` produces `bibtex` and `csljson` from Zotero itself (no reimplemented
-bibliography formatting) and shapes `json`/`csv`/`md` locally; `-o` writes to a
-file instead of stdout.
+`export` hands off to Zotero's own translators — `bibtex`, `biblatex`, `csljson`,
+`csv`, `mods`, `ris`, `tei`, and the `rdf_*` variants — so no bibliography
+formatting is reimplemented here. zotgo shapes only `json`, `summary-csv`, and
+`summary-md` itself. `-o` writes to a file instead of stdout, atomically.
+
+`mods`, `tei`, and `rdf_*` wrap each page of results in a single XML root
+element, so zotgo exports them only when the result fits in one page rather than
+emitting a document with two roots; narrow the query with `-c`/`-t`.
 
 Global flags: `--library/-L` selects a group library (by name or id; default is
 My Library), `--json` emits JSON instead of a table, and `--url` overrides the

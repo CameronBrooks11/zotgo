@@ -3,17 +3,75 @@ package zotero
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"net/url"
+	"sort"
+	"strings"
 )
 
-// ExportBibtex returns the items matching opts as BibTeX, produced server-side
-// by Zotero (format=bibtex) and concatenated across pages.
-func (c *Client) ExportBibtex(ctx context.Context, library LibraryRef, opts ItemsOptions) ([]byte, error) {
-	pages, err := c.exportPages(ctx, library, opts, "bibtex")
+// mergeFunc combines the per-page bodies of a paginated export into one
+// document. It receives at least one page.
+type mergeFunc func(format string, pages [][]byte) ([]byte, error)
+
+// exportFormats maps a Zotero translator name to the way its pages combine.
+//
+// Zotero paginates every item query, including exported ones, so a format is
+// only usable here if its pages can be reassembled into one valid document.
+// That is a property of the format, not of the transport, so it is recorded
+// per format rather than guessed at call time.
+var exportFormats = map[string]mergeFunc{
+	// Record-per-entry text: pages append.
+	"bibtex":   mergeConcat,
+	"biblatex": mergeConcat,
+	"ris":      mergeConcat,
+
+	// A JSON array per page: splice into one array.
+	"csljson": mergeJSONArray,
+
+	// A header row per page: keep the first, drop the rest.
+	"csv": mergeCSV,
+
+	// One XML root element per page. Two roots is not a document, so these
+	// merge only when the result fits in a single page.
+	"mods":              mergeSinglePage,
+	"tei":               mergeSinglePage,
+	"rdf_bibliontology": mergeSinglePage,
+	"rdf_dc":            mergeSinglePage,
+	"rdf_zotero":        mergeSinglePage,
+}
+
+// ExportFormats lists the server-side translator names Export accepts, sorted.
+func ExportFormats() []string {
+	names := make([]string, 0, len(exportFormats))
+	for name := range exportFormats {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// Export returns the items matching opts rendered by one of Zotero's own
+// translators (format=…), reassembled across pages.
+//
+// Zotero does the formatting; zotgo only rejoins what pagination split. A
+// format whose pages cannot be rejoined into a valid document yields
+// ErrUnmergeableExport rather than corrupt output.
+func (c *Client) Export(ctx context.Context, library LibraryRef, opts ItemsOptions, format string) ([]byte, error) {
+	merge, ok := exportFormats[format]
+	if !ok {
+		return nil, fmt.Errorf("%w: %q (want %s)", ErrUnsupportedFormat, format, strings.Join(ExportFormats(), ", "))
+	}
+	pages, err := c.exportPages(ctx, library, opts, format)
 	if err != nil {
 		return nil, err
 	}
+	return merge(format, pages)
+}
+
+// mergeConcat joins record-oriented text pages, separated by a blank line.
+func mergeConcat(_ string, pages [][]byte) ([]byte, error) {
 	trimmed := make([][]byte, 0, len(pages))
 	for _, p := range pages {
 		if t := bytes.TrimSpace(p); len(t) > 0 {
@@ -27,13 +85,8 @@ func (c *Client) ExportBibtex(ctx context.Context, library LibraryRef, opts Item
 	return joined, nil
 }
 
-// ExportCSLJSON returns the items matching opts as CSL-JSON, produced
-// server-side (format=csljson) and merged into one array across pages.
-func (c *Client) ExportCSLJSON(ctx context.Context, library LibraryRef, opts ItemsOptions) ([]byte, error) {
-	pages, err := c.exportPages(ctx, library, opts, "csljson")
-	if err != nil {
-		return nil, err
-	}
+// mergeJSONArray splices each page's top-level array into one array.
+func mergeJSONArray(_ string, pages [][]byte) ([]byte, error) {
 	merged := make([]json.RawMessage, 0)
 	for _, p := range pages {
 		if len(bytes.TrimSpace(p)) == 0 {
@@ -46,6 +99,47 @@ func (c *Client) ExportCSLJSON(ctx context.Context, library LibraryRef, opts Ite
 		merged = append(merged, arr...)
 	}
 	return json.MarshalIndent(merged, "", "  ")
+}
+
+// mergeCSV keeps the first page's header and drops the one repeating at the top
+// of every later page. The rows are parsed rather than split on newlines, since
+// a quoted field may contain one.
+func mergeCSV(_ string, pages [][]byte) ([]byte, error) {
+	var out [][]string
+	for i, p := range pages {
+		if len(bytes.TrimSpace(p)) == 0 {
+			continue
+		}
+		records, err := csv.NewReader(bytes.NewReader(p)).ReadAll()
+		if err != nil {
+			return nil, fmt.Errorf("parsing csv page %d: %w", i+1, err)
+		}
+		if len(records) == 0 {
+			continue
+		}
+		if len(out) > 0 {
+			records = records[1:] // Drop the repeated header.
+		}
+		out = append(out, records...)
+	}
+
+	var buf bytes.Buffer
+	w := csv.NewWriter(&buf)
+	if err := w.WriteAll(out); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), w.Error()
+}
+
+// mergeSinglePage passes one page through untouched and refuses more, because
+// concatenating documents that each carry a root element yields no document.
+func mergeSinglePage(format string, pages [][]byte) ([]byte, error) {
+	if len(pages) > 1 {
+		return nil, fmt.Errorf(
+			"%w: %s wraps each page in its own root element, and this query returned %d pages; narrow it with --collection or --tag",
+			ErrUnmergeableExport, format, len(pages))
+	}
+	return pages[0], nil
 }
 
 // exportPages fetches every page of an item query with a server-side format,

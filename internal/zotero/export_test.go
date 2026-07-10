@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestExportBibtex_ConcatenatesPagesByteExact(t *testing.T) {
+func TestExport_BibtexConcatenatesPagesByteExact(t *testing.T) {
 	var srv *httptest.Server
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/users/0/items/top", func(w http.ResponseWriter, r *http.Request) {
@@ -28,9 +28,9 @@ func TestExportBibtex_ConcatenatesPagesByteExact(t *testing.T) {
 	srv = httptest.NewServer(mux)
 	defer srv.Close()
 
-	got, err := New(srv.URL).ExportBibtex(context.Background(), UserLibrary(), ItemsOptions{Top: true})
+	got, err := New(srv.URL).Export(context.Background(), UserLibrary(), ItemsOptions{Top: true}, "bibtex")
 	if err != nil {
-		t.Fatalf("ExportBibtex: %v", err)
+		t.Fatalf("Export bibtex: %v", err)
 	}
 	want := "@article{a2009,\n\ttitle = {A}\n}\n\n@book{b2010,\n\ttitle = {B}\n}\n"
 	if string(got) != want {
@@ -38,7 +38,7 @@ func TestExportBibtex_ConcatenatesPagesByteExact(t *testing.T) {
 	}
 }
 
-func TestExportCSLJSON_MergesPages(t *testing.T) {
+func TestExport_CSLJSONMergesPages(t *testing.T) {
 	var srv *httptest.Server
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/users/0/items/top", func(w http.ResponseWriter, r *http.Request) {
@@ -53,9 +53,9 @@ func TestExportCSLJSON_MergesPages(t *testing.T) {
 	srv = httptest.NewServer(mux)
 	defer srv.Close()
 
-	got, err := New(srv.URL).ExportCSLJSON(context.Background(), UserLibrary(), ItemsOptions{Top: true})
+	got, err := New(srv.URL).Export(context.Background(), UserLibrary(), ItemsOptions{Top: true}, "csljson")
 	if err != nil {
-		t.Fatalf("ExportCSLJSON: %v", err)
+		t.Fatalf("Export csljson: %v", err)
 	}
 	var merged []map[string]any
 	if err := json.Unmarshal(got, &merged); err != nil {

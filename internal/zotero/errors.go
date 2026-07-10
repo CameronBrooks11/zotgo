@@ -16,6 +16,12 @@ var (
 	// be followed: no start offset, an unparseable one, or one that does not
 	// advance. Following it would loop forever.
 	ErrBadPagination = errors.New("zotero returned an unusable pagination cursor")
+	// ErrUnsupportedFormat means the requested export format is not one of the
+	// Zotero translators zotgo knows how to reassemble across pages.
+	ErrUnsupportedFormat = errors.New("unsupported export format")
+	// ErrUnmergeableExport means the result spans several pages in a format
+	// whose pages cannot be joined into one valid document.
+	ErrUnmergeableExport = errors.New("export spans pages that cannot be merged")
 	// ErrLocalAPIDisabled means Zotero is running, but the Local API pref is off.
 	ErrLocalAPIDisabled = errors.New("zotero local api is disabled")
 	// ErrNotFound means Zotero returned 404 for a requested object.

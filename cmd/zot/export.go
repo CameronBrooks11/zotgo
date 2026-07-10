@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/urfave/cli/v3"
@@ -17,10 +19,13 @@ import (
 func exportCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "export",
-		Usage:     "export items as bibtex, csljson, json, csv, or md",
+		Usage:     "export items via a Zotero translator or a zotgo summary",
 		ArgsUsage: "<format>",
-		Description: "Formats: bibtex (aliases: bib), csljson, json, csv, md (aliases: markdown).\n" +
-			"bibtex and csljson are produced by Zotero itself; json/csv/md are shaped by zotgo.",
+		Description: "Zotero translators: " + strings.Join(zotero.ExportFormats(), ", ") + " (alias: bib = bibtex).\n" +
+			"zotgo summaries: json, summary-csv, summary-md (aliases: md, markdown = summary-md).\n\n" +
+			"mods, tei, and the rdf_* formats wrap each page in one XML root element,\n" +
+			"so they export only results that fit in a single page; narrow the query\n" +
+			"with --collection or --tag.",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "collection", Aliases: []string{"c"}, Usage: "limit to a collection (key or exact name)"},
 			&cli.StringSliceFlag{Name: "tag", Aliases: []string{"t"}, Usage: "filter by tag (repeatable; AND)"},
@@ -56,42 +61,56 @@ func exportCommand() *cli.Command {
 	}
 }
 
-// renderExport produces the export bytes for a format, delegating BibTeX and
-// CSL-JSON to Zotero and shaping json/csv/md locally.
+// localFormats are shaped by zotgo rather than by a Zotero translator. They are
+// named apart from the translators so that `csv` unambiguously means Zotero's
+// own CSV, not zotgo's summary table.
+var localFormats = map[string]func(*strings.Builder, []zotero.Envelope) error{
+	"json":        func(b *strings.Builder, items []zotero.Envelope) error { return render.JSON(b, items) },
+	"summary-csv": func(b *strings.Builder, items []zotero.Envelope) error { return render.CSV(b, items) },
+	"summary-md":  func(b *strings.Builder, items []zotero.Envelope) error { return render.Markdown(b, items) },
+}
+
+// formatAliases spell shorthands used on the command line.
+var formatAliases = map[string]string{
+	"bib":      "bibtex",
+	"markdown": "summary-md",
+	"md":       "summary-md",
+}
+
+// renderExport produces the export bytes for a format: Zotero's translators
+// handle their own, and zotgo shapes the rest from item envelopes.
 func renderExport(ctx context.Context, c *zotero.Client, lib zotero.LibraryRef, opts zotero.ItemsOptions, format string) ([]byte, error) {
-	switch format {
-	case "bibtex", "bib":
-		data, err := c.ExportBibtex(ctx, lib, opts)
-		return data, friendly(err)
-	case "csljson":
-		data, err := c.ExportCSLJSON(ctx, lib, opts)
-		return data, friendly(err)
-	case "json", "csv", "md", "markdown":
+	if canonical, ok := formatAliases[format]; ok {
+		format = canonical
+	}
+
+	if shape, ok := localFormats[format]; ok {
 		items, err := c.AllItems(ctx, lib, opts)
 		if err != nil {
 			return nil, friendly(err)
 		}
-		return shapeItems(items, format)
-	default:
-		return nil, fmt.Errorf("unknown format %q (want bibtex, csljson, json, csv, or md)", format)
+		var buf strings.Builder
+		if err := shape(&buf, items); err != nil {
+			return nil, err
+		}
+		return []byte(buf.String()), nil
 	}
+
+	data, err := c.Export(ctx, lib, opts, format)
+	if errors.Is(err, zotero.ErrUnsupportedFormat) {
+		return nil, fmt.Errorf("unknown format %q (want %s)", format, strings.Join(allFormats(), ", "))
+	}
+	return data, friendly(err)
 }
 
-func shapeItems(items []zotero.Envelope, format string) ([]byte, error) {
-	var buf strings.Builder
-	var err error
-	switch format {
-	case "json":
-		err = render.JSON(&buf, items)
-	case "csv":
-		err = render.CSV(&buf, items)
-	case "md", "markdown":
-		err = render.Markdown(&buf, items)
+// allFormats lists every format the export command accepts, sorted.
+func allFormats() []string {
+	names := zotero.ExportFormats()
+	for name := range localFormats {
+		names = append(names, name)
 	}
-	if err != nil {
-		return nil, err
-	}
-	return []byte(buf.String()), nil
+	sort.Strings(names)
+	return names
 }
 
 func writeExport(cmd *cli.Command, path string, data []byte) error {
