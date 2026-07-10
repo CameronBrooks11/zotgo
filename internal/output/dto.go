@@ -74,17 +74,36 @@ type Stats struct {
 	Tags        int `json:"tags"`
 }
 
+// Endpoint identifies what zotgo is pointed at.
+type Endpoint struct {
+	// Kind is "local" for a running desktop Zotero.
+	Kind    string `json:"kind"`
+	BaseURL string `json:"baseUrl"`
+}
+
+// Capability is one thing the endpoint can or cannot do, with the reason when it
+// cannot. It describes the endpoint, not what zotgo has implemented against it.
+type Capability struct {
+	Name      string `json:"name"`
+	Supported bool   `json:"supported"`
+	// Reason is present only when Supported is false.
+	Reason string `json:"reason,omitempty"`
+}
+
 // Health reports what zotgo can reach, as `doctor` sees it.
 type Health struct {
-	BaseURL         string `json:"baseUrl"`
-	ZoteroRunning   bool   `json:"zoteroRunning"`
-	ZoteroVersion   string `json:"zoteroVersion,omitempty"`
-	LocalAPIEnabled bool   `json:"localApiEnabled"`
+	Endpoint        Endpoint `json:"endpoint"`
+	ZoteroRunning   bool     `json:"zoteroRunning"`
+	ZoteroVersion   string   `json:"zoteroVersion,omitempty"`
+	LocalAPIEnabled bool     `json:"localApiEnabled"`
 	// SchemaVersion and APIVersion are Zotero's, not zotgo's.
 	SchemaVersion string `json:"zoteroSchemaVersion,omitempty"`
 	APIVersion    string `json:"zoteroApiVersion,omitempty"`
 	// Ready is true when every surface zotgo needs for reads is usable.
 	Ready bool `json:"ready"`
+	// Capabilities always lists every known capability, supported or not, so a
+	// script can test a field rather than probe for a key's absence.
+	Capabilities []Capability `json:"capabilities"`
 }
 
 // zotero tag types: 0 is a manually entered tag, 1 one Zotero added itself.
@@ -181,14 +200,24 @@ func NewStats(s zotero.Stats) Stats {
 
 // NewHealth converts a doctor probe.
 func NewHealth(h zotero.Health) Health {
+	statuses := h.Capabilities()
+	caps := make([]Capability, 0, len(statuses))
+	for _, s := range statuses {
+		caps = append(caps, Capability{
+			Name:      string(s.Name),
+			Supported: s.Supported,
+			Reason:    s.Reason,
+		})
+	}
 	return Health{
-		BaseURL:         h.BaseURL,
+		Endpoint:        Endpoint{Kind: string(h.Endpoint.Kind), BaseURL: h.Endpoint.BaseURL},
 		ZoteroRunning:   h.ZoteroRunning,
 		ZoteroVersion:   h.ZoteroVersion,
 		LocalAPIEnabled: h.LocalAPIEnabled,
 		SchemaVersion:   h.SchemaVersion,
 		APIVersion:      h.APIVersion,
 		Ready:           h.Ready(),
+		Capabilities:    caps,
 	}
 }
 
