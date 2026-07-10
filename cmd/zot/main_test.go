@@ -356,6 +356,15 @@ func TestDoctorJSON(t *testing.T) {
 		Data struct {
 			Ready           bool `json:"ready"`
 			LocalAPIEnabled bool `json:"localApiEnabled"`
+			Endpoint        struct {
+				Kind    string `json:"kind"`
+				BaseURL string `json:"baseUrl"`
+			} `json:"endpoint"`
+			Capabilities []struct {
+				Name      string `json:"name"`
+				Supported bool   `json:"supported"`
+				Reason    string `json:"reason"`
+			} `json:"capabilities"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(out), &doc); err != nil {
@@ -363,6 +372,73 @@ func TestDoctorJSON(t *testing.T) {
 	}
 	if doc.Kind != "health" || !doc.Data.Ready || !doc.Data.LocalAPIEnabled {
 		t.Fatalf("doc = %+v", doc)
+	}
+	if doc.Data.Endpoint.Kind != "local" || doc.Data.Endpoint.BaseURL != srv.URL {
+		t.Errorf("endpoint = %+v", doc.Data.Endpoint)
+	}
+
+	caps := map[string]bool{}
+	reasons := map[string]string{}
+	for _, c := range doc.Data.Capabilities {
+		caps[c.Name] = c.Supported
+		reasons[c.Name] = c.Reason
+	}
+	for _, want := range []string{"read", "write", "connector-ingest", "local-file-access"} {
+		if _, ok := caps[want]; !ok {
+			t.Errorf("capability %q missing from --json", want)
+		}
+	}
+	if !caps["read"] {
+		t.Error("read should be supported against a healthy fake")
+	}
+	// The load-bearing claim: local writes do not exist, and we say why.
+	if caps["write"] {
+		t.Error("write must not be advertised")
+	}
+	if !strings.Contains(reasons["write"], "5015") {
+		t.Errorf("write reason should cite the upstream issue, got %q", reasons["write"])
+	}
+	// A supported capability carries no reason.
+	if reasons["read"] != "" {
+		t.Errorf("supported capability carries a reason: %q", reasons["read"])
+	}
+}
+
+// doctor's human output must name each capability and explain the missing ones.
+func TestDoctorHumanListsCapabilities(t *testing.T) {
+	srv := fakeZotero(true)
+	defer srv.Close()
+	out, _, err := runCLI(srv.URL, "doctor")
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	for _, want := range []string{
+		"Capabilities:", "read", "write", "connector-ingest", "local-file-access",
+		"zotero/zotero#5015", "local endpoint",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("doctor output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// With Zotero down, nothing is supported and every line explains itself.
+func TestDoctorHumanCapabilitiesWhenDown(t *testing.T) {
+	srv := fakeZotero(true)
+	url := srv.URL
+	srv.Close() // now refusing connections
+
+	out, _, err := runCLI(url, "doctor")
+	if err == nil {
+		t.Fatal("expected a non-zero exit")
+	}
+	for _, want := range []string{"Zotero not running", "Capabilities:", "Start the Zotero"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "✓") {
+		t.Errorf("a capability is marked supported while Zotero is down:\n%s", out)
 	}
 }
 
