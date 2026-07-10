@@ -7,6 +7,7 @@ import (
 
 	"github.com/urfave/cli/v3"
 
+	"github.com/CameronBrooks11/zotgo/internal/output"
 	"github.com/CameronBrooks11/zotgo/internal/render"
 	"github.com/CameronBrooks11/zotgo/internal/zotero"
 )
@@ -38,9 +39,15 @@ func showCommand() *cli.Command {
 				return friendly(err)
 			}
 
+			mode, err := outputMode(cmd)
+			if err != nil {
+				return err
+			}
 			w := out(cmd)
-			if cmd.Bool("json") {
-				return render.JSON(w, map[string]any{"item": item, "children": children})
+			if mode != output.ModeHuman {
+				raw := map[string]any{"item": item, "children": children}
+				return emitOne(w, mode, output.KindItem, output.NewLibrary(lib),
+					output.NewItemWithChildren(item, children), raw)
 			}
 			render.Item(w, item, children)
 			return nil

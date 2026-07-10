@@ -41,13 +41,13 @@ func searchCommand() *cli.Command {
 				if err != nil {
 					return friendly(err)
 				}
-				return emitItems(cmd, items, len(items), len(items))
+				return emitItems(cmd, lib, items, len(items), len(items))
 			}
 			items, page, err := c.Items(ctx, lib, opts)
 			if err != nil {
 				return friendly(err)
 			}
-			return emitItems(cmd, items, len(items), page.TotalResults)
+			return emitItems(cmd, lib, items, len(items), page.TotalResults)
 		},
 	}
 }

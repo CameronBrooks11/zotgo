@@ -45,6 +45,13 @@ func rootCommand() *cli.Command {
 		// main() owns error printing and exit codes; keep urfave from also
 		// printing or calling os.Exit.
 		ExitErrHandler: func(context.Context, *cli.Command, error) {},
+		// Reject a contradictory output mode before any command touches the
+		// network, so the user sees the flag mistake rather than whatever the
+		// request happened to fail with.
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			_, err := outputMode(cmd)
+			return ctx, err
+		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "url",
@@ -60,7 +67,15 @@ func rootCommand() *cli.Command {
 			},
 			&cli.BoolFlag{
 				Name:  "json",
-				Usage: "output JSON instead of a table",
+				Usage: "emit one versioned JSON document of zotgo DTOs",
+			},
+			&cli.BoolFlag{
+				Name:  "jsonl",
+				Usage: "emit one self-describing JSON document per line",
+			},
+			&cli.BoolFlag{
+				Name:  "raw",
+				Usage: "emit Zotero's own API response, unshaped and unversioned",
 			},
 		},
 		Commands: []*cli.Command{

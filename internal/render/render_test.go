@@ -36,24 +36,6 @@ func TestItemsTable(t *testing.T) {
 	}
 }
 
-func TestJSONRoundTrip(t *testing.T) {
-	var buf bytes.Buffer
-	in := []zotero.Envelope{item("AAAA", "book", "One")}
-	if err := JSON(&buf, in); err != nil {
-		t.Fatal(err)
-	}
-	var out []zotero.Envelope
-	if err := json.Unmarshal(buf.Bytes(), &out); err != nil {
-		t.Fatalf("re-decode: %v", err)
-	}
-	if len(out) != 1 || out[0].Key != "AAAA" {
-		t.Fatalf("round-trip mismatch: %+v", out)
-	}
-	if title := out[0].Title(); title != "One" {
-		t.Errorf("title = %q, want One", title)
-	}
-}
-
 func TestCollectionsTree(t *testing.T) {
 	var buf bytes.Buffer
 	Collections(&buf, []zotero.Envelope{

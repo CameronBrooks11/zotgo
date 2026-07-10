@@ -6,6 +6,7 @@ import (
 
 	"github.com/urfave/cli/v3"
 
+	"github.com/CameronBrooks11/zotgo/internal/output"
 	"github.com/CameronBrooks11/zotgo/internal/render"
 	"github.com/CameronBrooks11/zotgo/internal/zotero"
 )
@@ -44,24 +45,31 @@ func listCommand() *cli.Command {
 				if err != nil {
 					return friendly(err)
 				}
-				return emitItems(cmd, items, len(items), len(items))
+				return emitItems(cmd, lib, items, len(items), len(items))
 			}
 
 			items, page, err := c.Items(ctx, lib, opts)
 			if err != nil {
 				return friendly(err)
 			}
-			return emitItems(cmd, items, len(items), page.TotalResults)
+			return emitItems(cmd, lib, items, len(items), page.TotalResults)
 		},
 	}
 }
 
-// emitItems prints items as JSON or a table with a shown/total footer.
-func emitItems(cmd *cli.Command, items []zotero.Envelope, shown, total int) error {
-	w := out(cmd)
-	if cmd.Bool("json") {
-		return render.JSON(w, items)
+// emitItems prints items as a table, or in whichever machine mode was selected.
+func emitItems(cmd *cli.Command, lib zotero.LibraryRef, items []zotero.Envelope, shown, total int) error {
+	mode, err := outputMode(cmd)
+	if err != nil {
+		return err
 	}
+	w := out(cmd)
+
+	if mode != output.ModeHuman {
+		return emitSet(w, mode, output.KindItems, output.KindItem,
+			output.NewLibrary(lib), output.NewItems(items), shown, total, items)
+	}
+
 	render.Items(w, items)
 	if total > shown {
 		fmt.Fprintf(w, "\n%d of %d items (use --limit 0 for all)\n", shown, total)
