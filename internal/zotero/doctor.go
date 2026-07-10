@@ -8,8 +8,8 @@ import (
 // Health is a snapshot of whether zotgo can talk to Zotero and which of its two
 // HTTP surfaces are usable.
 type Health struct {
-	// BaseURL is the address that was probed.
-	BaseURL string
+	// Endpoint identifies what was probed: its kind and address.
+	Endpoint Profile
 	// ZoteroRunning is true when the Connector HTTP server accepted a
 	// connection (Zotero 7+ is running).
 	ZoteroRunning bool
@@ -39,7 +39,7 @@ func (h Health) Ready() bool {
 //   - GET /api/users/0/items?limit=1 — a protected Local API route that returns
 //     200 when the API is enabled and 403 when the pref is off.
 func (c *Client) CheckHealth(ctx context.Context) Health {
-	h := Health{BaseURL: c.baseURL}
+	h := Health{Endpoint: c.Profile()}
 
 	// Liveness + version. The connector ping is never gated by any pref, so a
 	// refused connection is the authoritative "Zotero is not running" signal.
