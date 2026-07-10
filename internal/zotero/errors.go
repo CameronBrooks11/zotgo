@@ -6,8 +6,12 @@ import (
 )
 
 var (
-	// ErrZoteroDown means the local HTTP server could not be reached.
+	// ErrZoteroDown means the endpoint refused a connection: nothing is
+	// listening, so Zotero is not running.
 	ErrZoteroDown = errors.New("zotero is not running")
+	// ErrTransport means the request failed after a connection was established.
+	// Zotero may well be running; the exchange itself broke.
+	ErrTransport = errors.New("zotero request failed")
 	// ErrBadPagination means Zotero advertised a rel="next" cursor that cannot
 	// be followed: no start offset, an unparseable one, or one that does not
 	// advance. Following it would loop forever.

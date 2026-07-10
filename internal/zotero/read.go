@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -168,7 +169,7 @@ func (c *Client) do(ctx context.Context, path string, values url.Values) ([]byte
 	}
 	resp, err := c.get(ctx, path)
 	if err != nil {
-		return nil, Page{}, errors.Join(ErrZoteroDown, err)
+		return nil, Page{}, classifyTransport(err)
 	}
 	defer resp.Body.Close()
 
@@ -189,6 +190,24 @@ func (c *Client) do(ctx context.Context, path string, values url.Values) ([]byte
 		return nil, page, readErr
 	}
 	return body, page, nil
+}
+
+// classifyTransport sorts a failed round-trip into the error taxonomy.
+//
+// Cancellation and deadlines are returned unwrapped by any sentinel: they are
+// the caller's own doing, and callers must be able to errors.Is them. A refused
+// dial is the only signal that authoritatively means Zotero is not listening.
+// Anything else broke after a connection existed, so it is a transport fault
+// rather than evidence about whether Zotero is running.
+func classifyTransport(err error) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) && opErr.Op == "dial" {
+		return fmt.Errorf("%w: %w", ErrZoteroDown, err)
+	}
+	return fmt.Errorf("%w: %w", ErrTransport, err)
 }
 
 func (c *Client) getJSON(ctx context.Context, path string, values url.Values, out any) (Page, error) {
