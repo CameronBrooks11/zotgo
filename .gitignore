@@ -35,12 +35,14 @@ go.work.sum
 .DS_Store
 Thumbs.db
 
-# Common output and scratch dirs
-artifacts/
-output/
-_reference/
+# Common output and scratch dirs. Anchored to the repo root: an unanchored
+# `output/` would also swallow internal/output, a real package.
+/artifacts/
+/output/
+/_reference/
 
 # Build output
 /bin/
 /dist/
-working/
+/zot
+/working/
