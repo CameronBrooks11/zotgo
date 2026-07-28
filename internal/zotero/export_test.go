@@ -65,3 +65,27 @@ func TestExport_CSLJSONMergesPages(t *testing.T) {
 		t.Fatalf("merged = %v", merged)
 	}
 }
+
+// The Web API wraps csljson pages as {"items":[…]} while the Local API returns a
+// bare array; both must unwrap to one flat array so the output is endpoint-neutral.
+func TestMergeCSLJSON_UnwrapsBothPageShapes(t *testing.T) {
+	pages := [][]byte{
+		[]byte(`{"items":[{"id":"a"},{"id":"b"}]}`), // Web API envelope
+		[]byte(`[{"id":"c"}]`),                      // Local API bare array
+	}
+	got, err := mergeCSLJSON("csljson", pages)
+	if err != nil {
+		t.Fatalf("mergeCSLJSON: %v", err)
+	}
+	var merged []map[string]any
+	if err := json.Unmarshal(got, &merged); err != nil {
+		t.Fatalf("merged output not a bare array: %v\n%s", err, got)
+	}
+	ids := []string{}
+	for _, m := range merged {
+		ids = append(ids, m["id"].(string))
+	}
+	if len(ids) != 3 || ids[0] != "a" || ids[1] != "b" || ids[2] != "c" {
+		t.Fatalf("merged ids = %v, want [a b c]", ids)
+	}
+}

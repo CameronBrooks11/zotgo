@@ -28,8 +28,8 @@ var exportFormats = map[string]mergeFunc{
 	"biblatex": mergeConcat,
 	"ris":      mergeConcat,
 
-	// A JSON array per page: splice into one array.
-	"csljson": mergeJSONArray,
+	// CSL-JSON: splice each page's items into one array.
+	"csljson": mergeCSLJSON,
 
 	// A header row per page: keep the first, drop the rest.
 	"csv": mergeCSV,
@@ -86,20 +86,45 @@ func mergeConcat(_ string, pages [][]byte) ([]byte, error) {
 	return joined, nil
 }
 
-// mergeJSONArray splices each page's top-level array into one array.
-func mergeJSONArray(_ string, pages [][]byte) ([]byte, error) {
+// mergeCSLJSON splices the CSL-JSON items from every page into one array.
+//
+// The two endpoints wrap csljson differently: the Local API returns a bare array
+// of items per page, the Web API an object {"items":[…]}. Both are unwrapped and
+// re-emitted as one bare CSL-JSON array — the interchange shape citeproc and
+// pandoc expect — so the output is identical whichever endpoint served it.
+func mergeCSLJSON(_ string, pages [][]byte) ([]byte, error) {
 	merged := make([]json.RawMessage, 0)
 	for _, p := range pages {
 		if len(bytes.TrimSpace(p)) == 0 {
 			continue
 		}
-		var arr []json.RawMessage
-		if err := json.Unmarshal(p, &arr); err != nil {
+		items, err := cslItems(p)
+		if err != nil {
 			return nil, err
 		}
-		merged = append(merged, arr...)
+		merged = append(merged, items...)
 	}
 	return json.MarshalIndent(merged, "", "  ")
+}
+
+// cslItems extracts one csljson page's items, accepting either the Local API's
+// bare array or the Web API's {"items":[…]} envelope.
+func cslItems(page []byte) ([]json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(page)
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		var arr []json.RawMessage
+		if err := json.Unmarshal(trimmed, &arr); err != nil {
+			return nil, err
+		}
+		return arr, nil
+	}
+	var env struct {
+		Items []json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(trimmed, &env); err != nil {
+		return nil, err
+	}
+	return env.Items, nil
 }
 
 // utf8BOM prefixes every page of Zotero's native CSV so spreadsheet software
