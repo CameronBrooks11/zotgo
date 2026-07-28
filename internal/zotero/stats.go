@@ -16,7 +16,7 @@ type Stats struct {
 // Stats returns library-wide counts. It issues one cheap limit=1 request per
 // count and reads the Total-Results header, never paging the actual rows.
 func (c *Client) Stats(ctx context.Context, library LibraryRef) (Stats, error) {
-	prefix := library.Prefix()
+	prefix := c.profile.LibraryPrefix(library)
 	counts := []struct {
 		path string
 		dst  *int

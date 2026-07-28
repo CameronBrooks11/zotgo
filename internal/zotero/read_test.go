@@ -144,19 +144,20 @@ func TestResolveLibrary(t *testing.T) {
 	defer srv.Close()
 
 	client := New(srv.URL)
+	local := LocalProfile("")
 	user, err := client.ResolveLibrary(context.Background(), "me")
 	if err != nil {
 		t.Fatalf("ResolveLibrary(me): %v", err)
 	}
-	if user.Prefix() != "/api/users/0" {
-		t.Fatalf("user prefix = %q", user.Prefix())
+	if local.LibraryPrefix(user) != "/api/users/0" {
+		t.Fatalf("user prefix = %q", local.LibraryPrefix(user))
 	}
 
 	byName, err := client.ResolveLibrary(context.Background(), "Energy Market")
 	if err != nil {
 		t.Fatalf("ResolveLibrary(name): %v", err)
 	}
-	if byName.Prefix() != "/api/groups/101" || byName.Name != "Energy Market" {
+	if local.LibraryPrefix(byName) != "/api/groups/101" || byName.Name != "Energy Market" {
 		t.Fatalf("byName = %+v", byName)
 	}
 
@@ -164,7 +165,7 @@ func TestResolveLibrary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveLibrary(id): %v", err)
 	}
-	if byID.Prefix() != "/api/groups/202" || byID.Name != "Power Flow" {
+	if local.LibraryPrefix(byID) != "/api/groups/202" || byID.Name != "Power Flow" {
 		t.Fatalf("byID = %+v", byID)
 	}
 }

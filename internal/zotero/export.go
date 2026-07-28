@@ -165,7 +165,7 @@ func mergeSinglePage(format string, pages [][]byte) ([]byte, error) {
 // exportPages fetches every page of an item query with a server-side format,
 // returning the raw page bodies in order.
 func (c *Client) exportPages(ctx context.Context, library LibraryRef, opts ItemsOptions, format string) ([][]byte, error) {
-	path := itemsPath(library, opts)
+	path := itemsPath(c.profile, library, opts)
 	var pages [][]byte
 	for {
 		values := itemValues(opts)

@@ -29,14 +29,6 @@ func GroupLibrary(id int64, name string) LibraryRef {
 	return LibraryRef{Kind: LibraryKindGroup, ID: id, Name: name}
 }
 
-// Prefix returns the user/group path prefix used by the Local API.
-func (l LibraryRef) Prefix() string {
-	if l.Kind == LibraryKindGroup {
-		return fmt.Sprintf("/api/groups/%d", l.ID)
-	}
-	return "/api/users/0"
-}
-
 // Group is the subset of /api/users/0/groups needed for library selection.
 type Group struct {
 	ID      int64     `json:"id"`
