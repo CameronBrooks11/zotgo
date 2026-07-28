@@ -119,13 +119,7 @@ func (h Health) localCapabilities() []CapabilityStatus {
 
 	caps := []CapabilityStatus{
 		{Name: CapabilityRead, Supported: blocked == "", Reason: blocked},
-		{
-			Name:      CapabilityWrite,
-			Supported: false,
-			// Not a probe result: every Local API endpoint is a GET today.
-			// Upstream tracks local writes as zotero/zotero#5015.
-			Reason: "Zotero's Local API exposes no write endpoints (upstream: zotero/zotero#5015)",
-		},
+		h.localWriteCapability(blocked),
 		{Name: CapabilityConnectorIngest, Supported: h.ZoteroRunning},
 		{Name: CapabilityLocalFileAccess, Supported: blocked == "", Reason: blocked},
 	}
@@ -133,6 +127,25 @@ func (h Health) localCapabilities() []CapabilityStatus {
 		caps[2].Reason = "Zotero is not running"
 	}
 	return caps
+}
+
+// localWriteCapability is now probe-derived: the Local API returns a
+// Zotero-Server-ID header on every response once it has the write endpoints
+// (zotero/zotero#5015). Its presence means this build supports writes; its
+// absence means the build predates them. When the API cannot even be read, the
+// blocking reason takes precedence — we cannot tell either way.
+func (h Health) localWriteCapability(blocked string) CapabilityStatus {
+	switch {
+	case blocked != "":
+		return CapabilityStatus{Name: CapabilityWrite, Reason: blocked}
+	case h.ServerID == "":
+		return CapabilityStatus{
+			Name:   CapabilityWrite,
+			Reason: "this Zotero build has no local write API (added upstream in zotero/zotero#5015; update Zotero once a release ships it)",
+		}
+	default:
+		return CapabilityStatus{Name: CapabilityWrite, Supported: true}
+	}
 }
 
 // webCapabilities reads reads and writes from the key's grants — the Web API's

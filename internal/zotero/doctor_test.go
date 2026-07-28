@@ -88,6 +88,30 @@ func TestCheckHealth_ZoteroDown(t *testing.T) {
 	}
 }
 
+// A Zotero build with the local write API returns a Zotero-Server-ID header on
+// every response; doctor derives write support from its presence.
+func TestCheckHealth_LocalWriteAPIDetectedViaServerID(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/connector/ping", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Zotero-Version", "9.9.9")
+		_, _ = w.Write([]byte("Zotero is running"))
+	})
+	mux.HandleFunc("/api/users/0/items", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Zotero-Server-ID", "srv-abc-123")
+		_, _ = w.Write([]byte("[]"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	h := New(srv.URL).CheckHealth(context.Background())
+	if h.ServerID != "srv-abc-123" {
+		t.Fatalf("ServerID = %q, want it captured from the header", h.ServerID)
+	}
+	if !h.Supports(CapabilityWrite) {
+		t.Error("write should be supported when Zotero-Server-ID is present")
+	}
+}
+
 // fakeWebAPI serves /keys/current with the given user grants, or a 403 when
 // grant is empty (a rejected key).
 func fakeWebAPI(body string) *httptest.Server {

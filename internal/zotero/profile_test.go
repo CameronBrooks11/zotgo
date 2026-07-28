@@ -49,26 +49,43 @@ func TestCapabilities_ReadyEndpoint(t *testing.T) {
 	if !h.Supports(CapabilityLocalFileAccess) {
 		t.Error("local file access should be supported on a ready endpoint")
 	}
-	// The whole point of modelling this: local writes do not exist yet.
+	// A ready endpoint without the write API (no Zotero-Server-ID) still cannot write.
 	if h.Supports(CapabilityWrite) {
-		t.Error("write must never be advertised on a local endpoint today")
+		t.Error("write must not be advertised without the write API detected")
 	}
 }
 
-// Writes are unsupported regardless of how healthy the endpoint is, and the
-// reason must point at the upstream issue rather than blame the user's setup.
-func TestCapabilities_WriteIsAlwaysUnsupportedLocally(t *testing.T) {
+// Local write is probe-derived from the Zotero-Server-ID header: present means
+// this build has the write API (zotero/zotero#5015), absent means it does not.
+func TestCapabilities_LocalWriteFollowsServerID(t *testing.T) {
+	withAPI := Health{ZoteroRunning: true, LocalAPIEnabled: true, ServerID: "abc123"}
+	if !withAPI.Supports(CapabilityWrite) {
+		t.Error("write should be supported when the Local API returns a Zotero-Server-ID")
+	}
+
+	noAPI := Health{ZoteroRunning: true, LocalAPIEnabled: true}
+	w := capByName(t, noAPI, CapabilityWrite)
+	if w.Supported {
+		t.Fatal("write supported without a Zotero-Server-ID")
+	}
+	if !strings.Contains(w.Reason, "5015") {
+		t.Errorf("write reason should cite the upstream issue, got %q", w.Reason)
+	}
+}
+
+// When the endpoint cannot even be read, the write reason must defer to the
+// blocker rather than claim to know about the write API.
+func TestCapabilities_LocalWriteDefersToBlocker(t *testing.T) {
 	for _, h := range []Health{
-		{ZoteroRunning: true, LocalAPIEnabled: true},
 		{ZoteroRunning: true, LocalAPIEnabled: false},
 		{ZoteroRunning: false},
 	} {
 		w := capByName(t, h, CapabilityWrite)
 		if w.Supported {
-			t.Fatalf("write supported for %+v", h)
+			t.Fatalf("write supported for blocked endpoint %+v", h)
 		}
-		if !strings.Contains(w.Reason, "5015") {
-			t.Errorf("write reason should cite the upstream issue, got %q", w.Reason)
+		if w.Reason == "" || strings.Contains(w.Reason, "5015") {
+			t.Errorf("blocked write reason should describe the blocker, got %q", w.Reason)
 		}
 	}
 }
