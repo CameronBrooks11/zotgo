@@ -87,3 +87,88 @@ func TestCheckHealth_ZoteroDown(t *testing.T) {
 		t.Errorf("expected not Ready when Zotero is down")
 	}
 }
+
+// fakeWebAPI serves /keys/current with the given user grants, or a 403 when
+// grant is empty (a rejected key).
+func fakeWebAPI(body string) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if body == "" {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Zotero-API-Version", "3")
+		_, _ = w.Write([]byte(body))
+	}))
+}
+
+func capReason(h Health, name Capability) (bool, string) {
+	for _, c := range h.Capabilities() {
+		if c.Name == name {
+			return c.Supported, c.Reason
+		}
+	}
+	return false, "missing"
+}
+
+func TestCheckHealth_WebReadOnlyKeyIsReady(t *testing.T) {
+	srv := fakeWebAPI(`{"userID":9,"access":{"user":{"library":true,"write":false}}}`)
+	defer srv.Close()
+
+	h := NewWeb(srv.URL, "k").CheckHealth(context.Background())
+
+	if !h.Reachable || !h.KeyValid || h.WebUserID != 9 {
+		t.Fatalf("reachable/keyValid/userID = %v/%v/%d, want true/true/9", h.Reachable, h.KeyValid, h.WebUserID)
+	}
+	if !h.Ready() {
+		t.Fatal("read-only key with library access should be Ready")
+	}
+	if ok, _ := capReason(h, CapabilityRead); !ok {
+		t.Error("read capability should be supported")
+	}
+	if ok, reason := capReason(h, CapabilityWrite); ok || reason == "" {
+		t.Errorf("write = supported %v (%q), want unsupported with a reason", ok, reason)
+	}
+	if ok, reason := capReason(h, CapabilityConnectorIngest); ok || reason == "" {
+		t.Errorf("connector-ingest = %v (%q), want unsupported with a local-only reason", ok, reason)
+	}
+}
+
+func TestCheckHealth_WebWriteKeyReportsWrite(t *testing.T) {
+	srv := fakeWebAPI(`{"userID":9,"access":{"user":{"library":true,"write":true}}}`)
+	defer srv.Close()
+
+	h := NewWeb(srv.URL, "k").CheckHealth(context.Background())
+	if ok, _ := capReason(h, CapabilityWrite); !ok {
+		t.Error("a key granting write should report write supported (the endpoint allows it)")
+	}
+}
+
+func TestCheckHealth_WebInvalidKey(t *testing.T) {
+	srv := fakeWebAPI("")
+	defer srv.Close()
+
+	h := NewWeb(srv.URL, "bad").CheckHealth(context.Background())
+	if !h.Reachable {
+		t.Error("a 403 still proves the endpoint is reachable")
+	}
+	if h.KeyValid || h.Ready() {
+		t.Errorf("keyValid=%v ready=%v, want both false", h.KeyValid, h.Ready())
+	}
+	if ok, reason := capReason(h, CapabilityRead); ok || reason == "" {
+		t.Errorf("read = %v (%q), want unsupported citing the key", ok, reason)
+	}
+}
+
+func TestCheckHealth_WebUnreachable(t *testing.T) {
+	srv := fakeWebAPI(`{"userID":9,"access":{}}`)
+	url := srv.URL
+	srv.Close()
+
+	h := NewWeb(url, "k").CheckHealth(context.Background())
+	if h.Reachable || h.Ready() {
+		t.Errorf("reachable=%v ready=%v against a closed server, want both false", h.Reachable, h.Ready())
+	}
+	if _, reason := capReason(h, CapabilityRead); reason == "" {
+		t.Error("unreachable read capability should carry a reason")
+	}
+}

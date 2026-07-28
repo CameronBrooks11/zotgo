@@ -40,6 +40,35 @@ type WebGroupAccess struct {
 	Write   bool `json:"write"`
 }
 
+// grantsRead reports whether the key can read at least one library — its owner's
+// or any group it reaches. The special "all" groups entry is included.
+func (k WebKey) grantsRead() bool {
+	if k.Access.User.Library {
+		return true
+	}
+	for _, g := range k.Access.Groups {
+		if g.Library {
+			return true
+		}
+	}
+	return false
+}
+
+// grantsWrite reports whether the key can write to at least one library. The
+// capability describes the endpoint, not what zotgo implements: v0.5 issues no
+// writes, but the Web API would accept them where the key allows.
+func (k WebKey) grantsWrite() bool {
+	if k.Access.User.Write {
+		return true
+	}
+	for _, g := range k.Access.Groups {
+		if g.Write {
+			return true
+		}
+	}
+	return false
+}
+
 // WebKey fetches /keys/current, describing the key this Client authenticates
 // with. It is only valid on the Web endpoint.
 //
