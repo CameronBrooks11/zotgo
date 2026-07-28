@@ -9,9 +9,13 @@ project. Tool-specific files (for example the root `CLAUDE.md`) point here.
 `zotgo` (`zot` on the command line) is a zero-dependency Go binary for a running
 [Zotero](https://www.zotero.org/) 7+ desktop app.
 
-- **Reads** go through Zotero's **Local API** (`/api/*`, Zotero 7+, off by
-  default). Read-only, Web-API-v3 compatible.
-- **Writes** do not exist yet. The Local API is read-only today, and zotgo waits
+- **Reads** go through one of two endpoints, selected by profile: the **Local
+  API** (`/api/*`, Zotero 7+, off by default — the default) or, under `--web`,
+  the hosted **Web API** (`api.zotero.org`, API key in `ZOTGO_API_KEY`). Both
+  are API-v3, so one semantic client serves both; the endpoints never silently
+  fall back to each other, and each is its own version/concurrency domain.
+- **Writes** do not exist yet on either endpoint. The Local API is read-only
+  today; the Web profile is deliberately read-only for now too. zotgo waits
   for Zotero's official write contract rather than reaching around it. The
   **Connector API** (`/connector/*`) is reserved for *ingestion* — where Zotero
   performs an app-level workflow such as PDF recognition or import — and is

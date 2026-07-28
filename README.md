@@ -88,7 +88,29 @@ element, so zotgo exports them only when the result fits in one page rather than
 emitting a document with two roots; narrow the query with `-c`/`-t`.
 
 Global flags: `--library/-L` selects a group library (by name or id; default is
-My Library), and `--url` overrides the Zotero address.
+My Library), and `--url` overrides the endpoint address.
+
+### Remote libraries (`--web`)
+
+By default `zot` talks to the Zotero desktop app on this machine. `--web` points
+the same commands at the hosted Web API (`api.zotero.org`) instead — useful for
+headless, CI, or remote use where no desktop Zotero is running.
+
+```bash
+export ZOTGO_API_KEY=…          # from https://www.zotero.org/settings/keys
+zot doctor --web                # confirm the key and see what it grants
+zot --web list                  # every read command works over the Web API
+zot --web export bibtex -o refs.bib
+```
+
+The API key is read only from the `ZOTGO_API_KEY` environment variable, never a
+flag, so it cannot leak into your shell history or `ps` output. A read-only key
+is enough — `zot` issues no writes. `doctor --web` reports the key's actual
+grants, so `write` shows supported only if your key allows it (the endpoint
+allows it; `zot` still does not write today).
+
+The local and Web endpoints are separate: `zot` never silently falls back from
+one to the other, and `--web` is always explicit.
 
 ## Machine-readable output
 
