@@ -30,6 +30,9 @@ var (
 	ErrLibraryNotFound = errors.New("zotero library not found")
 	// ErrAmbiguousLibrary means a library selector matched more than one group name.
 	ErrAmbiguousLibrary = errors.New("zotero library selector is ambiguous")
+	// ErrInvalidAPIKey means the Web API rejected the API key, or it resolved to
+	// no user: it is missing, revoked, or wrong.
+	ErrInvalidAPIKey = errors.New("zotero web api key is invalid")
 )
 
 // StatusError preserves an unexpected non-2xx response from Zotero.
