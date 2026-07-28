@@ -105,8 +105,16 @@ func (h Health) localAPIUnavailable() string {
 //
 // Capabilities are derived from the probe rather than discovered by exercising
 // them: zotgo will not issue a speculative write to find out whether writes are
-// allowed.
+// allowed. The Web endpoint can report writes honestly because the key's own
+// grants say so; the local endpoint cannot, and says why.
 func (h Health) Capabilities() []CapabilityStatus {
+	if h.Endpoint.Kind == EndpointWeb {
+		return h.webCapabilities()
+	}
+	return h.localCapabilities()
+}
+
+func (h Health) localCapabilities() []CapabilityStatus {
 	blocked := h.localAPIUnavailable()
 
 	caps := []CapabilityStatus{
@@ -125,6 +133,37 @@ func (h Health) Capabilities() []CapabilityStatus {
 		caps[2].Reason = "Zotero is not running"
 	}
 	return caps
+}
+
+// webCapabilities reads reads and writes from the key's grants — the Web API's
+// own statement of what the key may do. Connector ingestion and local-file
+// access are inherently local-desktop features with no Web API equivalent.
+func (h Health) webCapabilities() []CapabilityStatus {
+	var readReason, writeReason string
+	var canRead, canWrite bool
+	switch {
+	case !h.Reachable:
+		readReason = "api.zotero.org is unreachable"
+		writeReason = readReason
+	case !h.KeyValid:
+		readReason = "the API key is missing, revoked, or wrong"
+		writeReason = readReason
+	default:
+		canRead = h.webKey.grantsRead()
+		if !canRead {
+			readReason = "the API key grants no library read access"
+		}
+		canWrite = h.webKey.grantsWrite()
+		if !canWrite {
+			writeReason = "the API key is read-only"
+		}
+	}
+	return []CapabilityStatus{
+		{Name: CapabilityRead, Supported: canRead, Reason: readReason},
+		{Name: CapabilityWrite, Supported: canWrite, Reason: writeReason},
+		{Name: CapabilityConnectorIngest, Supported: false, Reason: "Connector ingestion needs a local Zotero; the Web API has no equivalent"},
+		{Name: CapabilityLocalFileAccess, Supported: false, Reason: "resolving attachments to local files needs a local Zotero"},
+	}
 }
 
 // Supports reports whether the endpoint offers a capability.
