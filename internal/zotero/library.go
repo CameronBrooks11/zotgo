@@ -47,21 +47,38 @@ type GroupData struct {
 	Description string `json:"description"`
 }
 
-// Groups lists groups visible to the logged-in local Zotero user.
+// Groups lists the groups the endpoint's own user can reach. On the Web API the
+// route carries the key owner's real id; locally it is the "0" sentinel.
 func (c *Client) Groups(ctx context.Context) ([]Group, error) {
+	self, err := c.selfUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return c.groupsFor(ctx, self)
+}
+
+// groupsFor lists groups under a resolved owner, without re-resolving identity.
+func (c *Client) groupsFor(ctx context.Context, owner LibraryRef) ([]Group, error) {
 	var groups []Group
-	_, err := c.getJSON(ctx, "/api/users/0/groups", nil, &groups)
+	_, err := c.getJSON(ctx, c.profile.LibraryPrefix(owner)+"/groups", nil, &groups)
 	return groups, err
 }
 
-// ResolveLibrary maps a CLI-facing selector to a Local API library route.
+// ResolveLibrary maps a CLI-facing selector to a library route on this endpoint.
 //
-// "", "me", "my", and "user" select My Library. Group selectors may be a
-// numeric group id, "group/<id>", "groups/<id>", or an exact group name.
+// "", "me", "my", and "user" select the endpoint's own user library. Group
+// selectors may be a numeric group id, "group/<id>", "groups/<id>", or an exact
+// group name. Identity is resolved once (a no-op locally, one /keys/current call
+// on the Web endpoint) and reused for any group lookup.
 func (c *Client) ResolveLibrary(ctx context.Context, selector string) (LibraryRef, error) {
 	selector = strings.TrimSpace(selector)
+
+	self, err := c.selfUser(ctx)
+	if err != nil {
+		return LibraryRef{}, err
+	}
 	if selector == "" || selector == "me" || selector == "my" || selector == "user" || selector == "users/0" {
-		return UserLibrary(), nil
+		return self, nil
 	}
 
 	groupIDText := selector
@@ -69,7 +86,7 @@ func (c *Client) ResolveLibrary(ctx context.Context, selector string) (LibraryRe
 		groupIDText = strings.TrimPrefix(groupIDText, prefix)
 	}
 	if id, err := strconv.ParseInt(groupIDText, 10, 64); err == nil {
-		groups, err := c.Groups(ctx)
+		groups, err := c.groupsFor(ctx, self)
 		if err != nil {
 			return LibraryRef{}, err
 		}
@@ -81,7 +98,7 @@ func (c *Client) ResolveLibrary(ctx context.Context, selector string) (LibraryRe
 		return LibraryRef{}, fmt.Errorf("%w: %s", ErrLibraryNotFound, selector)
 	}
 
-	groups, err := c.Groups(ctx)
+	groups, err := c.groupsFor(ctx, self)
 	if err != nil {
 		return LibraryRef{}, err
 	}
