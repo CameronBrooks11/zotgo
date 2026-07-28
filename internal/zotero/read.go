@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Page carries pagination and version headers for a Local API response.
@@ -20,6 +21,10 @@ type Page struct {
 	LastModifiedVersion string
 	SchemaVersion       string
 	APIVersion          string
+	// Backoff is the Web API's request to pause before further requests when its
+	// servers are loaded (the Backoff header). Zero when absent. Pagination loops
+	// honor it between pages.
+	Backoff time.Duration
 }
 
 // ItemsOptions controls item-list and search requests.
@@ -85,8 +90,24 @@ func (c *Client) AllItems(ctx context.Context, library LibraryRef, opts ItemsOpt
 		if !more {
 			return all, nil
 		}
+		if err := c.honorBackoff(ctx, page); err != nil {
+			return nil, err
+		}
 		opts.Start = start
 	}
+}
+
+// honorBackoff pauses between paginated requests when the Web API asked the
+// client to slow down. Capped like a retry so a stray header cannot hang the CLI.
+func (c *Client) honorBackoff(ctx context.Context, page Page) error {
+	if page.Backoff <= 0 {
+		return nil
+	}
+	wait := page.Backoff
+	if wait > maxRetryWait {
+		wait = maxRetryWait
+	}
+	return c.sleep(ctx, wait)
 }
 
 // Item reads one item by key.
@@ -134,6 +155,9 @@ func (c *Client) AllCollections(ctx context.Context, library LibraryRef, opts Co
 		if !more {
 			return all, nil
 		}
+		if err := c.honorBackoff(ctx, page); err != nil {
+			return nil, err
+		}
 		opts.Start = start
 	}
 }
@@ -170,34 +194,62 @@ func itemValues(opts ItemsOptions) url.Values {
 }
 
 // do performs a GET and returns the full response body plus pagination/version
-// headers, mapping non-2xx responses to the typed error taxonomy.
+// headers, mapping non-2xx responses to the typed error taxonomy. A 429 or 503
+// is retried, honoring Retry-After, up to maxRetries times before it surfaces.
 func (c *Client) do(ctx context.Context, path string, values url.Values) ([]byte, Page, error) {
 	if len(values) > 0 {
 		path += "?" + values.Encode()
 	}
-	resp, err := c.get(ctx, path)
-	if err != nil {
-		return nil, Page{}, classifyTransport(err)
-	}
-	defer resp.Body.Close()
-
-	page := pageFromHeader(resp.Header)
-	body, readErr := io.ReadAll(resp.Body)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		switch resp.StatusCode {
-		case http.StatusForbidden:
-			if len(body) == 0 || strings.Contains(string(body), "Local API is not enabled") {
-				return nil, page, ErrLocalAPIDisabled
-			}
-		case http.StatusNotFound:
-			return nil, page, ErrNotFound
+	for attempt := 0; ; attempt++ {
+		resp, err := c.get(ctx, path)
+		if err != nil {
+			return nil, Page{}, classifyTransport(err)
 		}
-		return nil, page, StatusError{StatusCode: resp.StatusCode, Body: snippet(body)}
+		page := pageFromHeader(resp.Header)
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable {
+			wait := retryAfter(resp.Header)
+			if attempt < maxRetries && wait <= maxRetryWait {
+				if err := c.sleep(ctx, wait); err != nil {
+					return nil, page, err
+				}
+				continue
+			}
+			return nil, page, StatusError{StatusCode: resp.StatusCode, Body: snippet(body)}
+		}
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			switch resp.StatusCode {
+			case http.StatusForbidden:
+				if len(body) == 0 || strings.Contains(string(body), "Local API is not enabled") {
+					return nil, page, ErrLocalAPIDisabled
+				}
+			case http.StatusNotFound:
+				return nil, page, ErrNotFound
+			}
+			return nil, page, StatusError{StatusCode: resp.StatusCode, Body: snippet(body)}
+		}
+		if readErr != nil {
+			return nil, page, readErr
+		}
+		return body, page, nil
 	}
-	if readErr != nil {
-		return nil, page, readErr
+}
+
+// retryAfter reads a Retry-After header as a whole number of seconds, Zotero's
+// form. A missing or unparseable value falls back to defaultBackoff, so a
+// throttled request always waits something rather than hammering.
+func retryAfter(h http.Header) time.Duration {
+	v := strings.TrimSpace(h.Get("Retry-After"))
+	if v == "" {
+		return defaultBackoff
 	}
-	return body, page, nil
+	if secs, err := strconv.Atoi(v); err == nil && secs >= 0 {
+		return time.Duration(secs) * time.Second
+	}
+	return defaultBackoff
 }
 
 // classifyTransport sorts a failed round-trip into the error taxonomy.
@@ -243,12 +295,17 @@ func snippet(body []byte) string {
 
 func pageFromHeader(h http.Header) Page {
 	total, _ := strconv.Atoi(h.Get("Total-Results"))
+	var backoff time.Duration
+	if secs, err := strconv.Atoi(strings.TrimSpace(h.Get("Backoff"))); err == nil && secs > 0 {
+		backoff = time.Duration(secs) * time.Second
+	}
 	return Page{
 		TotalResults:        total,
 		NextURL:             linkRel(h.Get("Link"), "next"),
 		LastModifiedVersion: h.Get("Last-Modified-Version"),
 		SchemaVersion:       h.Get("Zotero-Schema-Version"),
 		APIVersion:          h.Get("Zotero-API-Version"),
+		Backoff:             backoff,
 	}
 }
 

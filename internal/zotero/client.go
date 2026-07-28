@@ -30,6 +30,36 @@ type Client struct {
 	profile Profile
 	auth    Authenticator
 	http    *http.Client
+	// sleep waits for a duration or until ctx is cancelled. It is a field so
+	// tests can make rate-limit waits instant. Defaults to ctxSleep.
+	sleep func(ctx context.Context, d time.Duration) error
+}
+
+// Rate-limit handling for the Web API. The Local API never rate-limits, so these
+// only ever fire against api.zotero.org.
+const (
+	// maxRetries bounds how many times a 429/503 is retried before giving up.
+	maxRetries = 4
+	// maxRetryWait caps how long a single Retry-After is honored, so a hostile or
+	// mistaken header cannot hang the CLI indefinitely.
+	maxRetryWait = 60 * time.Second
+	// defaultBackoff is used when a 429/503 carries no parseable Retry-After.
+	defaultBackoff = time.Second
+)
+
+// ctxSleep waits for d, returning early with ctx's error if it is cancelled.
+func ctxSleep(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
 }
 
 // DefaultTimeout bounds a single Local API round-trip, body included.
@@ -90,6 +120,7 @@ func newClient(profile Profile, auth Authenticator, timeout time.Duration, opts 
 		profile: profile,
 		auth:    auth,
 		http:    &http.Client{Timeout: timeout},
+		sleep:   ctxSleep,
 	}
 	for _, opt := range opts {
 		opt(c)
