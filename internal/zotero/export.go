@@ -187,6 +187,9 @@ func (c *Client) exportPages(ctx context.Context, library LibraryRef, opts Items
 		if !more {
 			return pages, nil
 		}
+		if err := c.honorBackoff(ctx, page); err != nil {
+			return nil, err
+		}
 		opts.Start = start
 	}
 }
