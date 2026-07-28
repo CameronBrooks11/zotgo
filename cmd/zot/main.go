@@ -55,9 +55,12 @@ func rootCommand() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "url",
-				Usage:   "Zotero HTTP server base URL",
-				Value:   zotero.DefaultBaseURL,
+				Usage:   "API base URL (default: local Zotero; api.zotero.org with --web)",
 				Sources: cli.EnvVars("ZOTGO_BASE_URL"),
+			},
+			&cli.BoolFlag{
+				Name:  "web",
+				Usage: "use the Zotero Web API; needs an API key in ZOTGO_API_KEY",
 			},
 			&cli.StringFlag{
 				Name:    "library",
@@ -99,9 +102,27 @@ func out(cmd *cli.Command) io.Writer {
 	return os.Stdout
 }
 
-// resolveLibrary builds a client from --url and resolves --library to a route.
+// newClient builds a client for the endpoint the flags select: the local Zotero
+// by default, or the Web API under --web. The Web API key is read from the
+// environment, never a flag, so it cannot leak into `ps` output or shell history.
+func newClient(cmd *cli.Command) (*zotero.Client, error) {
+	if cmd.Bool("web") {
+		key := os.Getenv("ZOTGO_API_KEY")
+		if key == "" {
+			return nil, errors.New("--web needs a Zotero API key; set ZOTGO_API_KEY (create one at https://www.zotero.org/settings/keys)")
+		}
+		return zotero.NewWeb(cmd.String("url"), key), nil
+	}
+	return zotero.New(cmd.String("url")), nil
+}
+
+// resolveLibrary builds a client for the selected endpoint and resolves
+// --library to a route on it.
 func resolveLibrary(ctx context.Context, cmd *cli.Command) (*zotero.Client, zotero.LibraryRef, error) {
-	c := zotero.New(cmd.String("url"))
+	c, err := newClient(cmd)
+	if err != nil {
+		return nil, zotero.LibraryRef{}, err
+	}
 	lib, err := c.ResolveLibrary(ctx, cmd.String("library"))
 	if err != nil {
 		return nil, zotero.LibraryRef{}, friendly(err)
@@ -118,6 +139,9 @@ func friendly(err error) error {
 	case errors.Is(err, zotero.ErrLocalAPIDisabled):
 		//lint:ignore ST1005 "Zotero" is a proper noun.
 		return errors.New("Zotero's Local API is disabled — run `zot doctor` for setup steps")
+	case errors.Is(err, zotero.ErrInvalidAPIKey):
+		//lint:ignore ST1005 "Zotero" is a proper noun.
+		return errors.New("Zotero rejected the API key — check ZOTGO_API_KEY (run `zot doctor --web`)")
 	}
 	return err
 }

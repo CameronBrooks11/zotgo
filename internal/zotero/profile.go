@@ -149,11 +149,15 @@ func (h Health) webCapabilities() []CapabilityStatus {
 		readReason = "the API key is missing, revoked, or wrong"
 		writeReason = readReason
 	default:
-		canRead = h.webKey.grantsRead()
+		// A valid key always carries its grants; guard anyway so a hand-built
+		// Health cannot panic here.
+		if h.webKey != nil {
+			canRead = h.webKey.grantsRead()
+			canWrite = h.webKey.grantsWrite()
+		}
 		if !canRead {
 			readReason = "the API key grants no library read access"
 		}
-		canWrite = h.webKey.grantsWrite()
 		if !canWrite {
 			writeReason = "the API key is read-only"
 		}

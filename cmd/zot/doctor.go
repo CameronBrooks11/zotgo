@@ -6,13 +6,12 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/CameronBrooks11/zotgo/internal/output"
-	"github.com/CameronBrooks11/zotgo/internal/zotero"
 )
 
 func doctorCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "doctor",
-		Usage: "check that Zotero is running and its Local API is enabled",
+		Usage: "check that the selected endpoint is reachable and usable",
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			mode, err := outputMode(cmd)
 			if err != nil {
@@ -22,7 +21,11 @@ func doctorCommand() *cli.Command {
 			if mode == output.ModeRaw {
 				return output.ErrRawUnavailable
 			}
-			h := zotero.New(cmd.String("url")).CheckHealth(ctx)
+			c, err := newClient(cmd)
+			if err != nil {
+				return err
+			}
+			h := c.CheckHealth(ctx)
 
 			if mode != output.ModeHuman {
 				// doctor takes no library, so the envelope carries none.
