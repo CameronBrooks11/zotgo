@@ -25,6 +25,11 @@ type Health struct {
 	ZoteroRunning   bool
 	ZoteroVersion   string
 	LocalAPIEnabled bool
+	// ServerID is the Zotero-Server-ID header the Local API returns on every
+	// response once it has the local write API (zotero/zotero#5015). Its presence
+	// is the probe signal that this Zotero build supports writes; empty on builds
+	// that predate the write endpoints.
+	ServerID string
 
 	// Web endpoint only.
 	//
@@ -93,6 +98,8 @@ func (c *Client) checkLocal(ctx context.Context) Health {
 		h.LocalAPIEnabled = true
 		h.SchemaVersion = resp.Header.Get("Zotero-Schema-Version")
 		h.APIVersion = resp.Header.Get("Zotero-API-Version")
+		// Present only on builds with the local write API (zotero/zotero#5015).
+		h.ServerID = resp.Header.Get("Zotero-Server-ID")
 	case http.StatusForbidden:
 		h.LocalAPIEnabled = false
 	}
