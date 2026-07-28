@@ -41,6 +41,9 @@ func TestRenderHealth_NoTrailingWhitespace(t *testing.T) {
 		{Endpoint: zotero.LocalProfile("http://x"), ZoteroRunning: true, LocalAPIEnabled: true},
 		{Endpoint: zotero.LocalProfile("http://x"), ZoteroRunning: true},
 		{Endpoint: zotero.LocalProfile("http://x")},
+		{Endpoint: zotero.WebProfile("https://api.zotero.org"), Reachable: true, KeyValid: true, WebUserID: 12345},
+		{Endpoint: zotero.WebProfile("https://api.zotero.org"), Reachable: true},
+		{Endpoint: zotero.WebProfile("https://api.zotero.org")},
 	} {
 		for i, line := range strings.Split(renderToString(h), "\n") {
 			if line != strings.TrimRight(line, " \t") {
@@ -120,5 +123,18 @@ func TestRenderHealth_KeepsActionableGuidance(t *testing.T) {
 	ready := renderToString(zotero.Health{Endpoint: zotero.LocalProfile("http://x"), ZoteroRunning: true, LocalAPIEnabled: true})
 	if !strings.Contains(ready, "Ready.") {
 		t.Errorf("missing ready line:\n%s", ready)
+	}
+}
+
+// The web endpoint's guidance points at the API key, not the desktop app.
+func TestRenderHealth_WebGuidance(t *testing.T) {
+	rejected := renderToString(zotero.Health{Endpoint: zotero.WebProfile("https://api.zotero.org"), Reachable: true})
+	if !strings.Contains(rejected, "API key rejected") || !strings.Contains(rejected, "ZOTGO_API_KEY") {
+		t.Errorf("missing rejected-key guidance:\n%s", rejected)
+	}
+
+	unreachable := renderToString(zotero.Health{Endpoint: zotero.WebProfile("https://api.zotero.org")})
+	if !strings.Contains(unreachable, "unreachable") {
+		t.Errorf("missing unreachable guidance:\n%s", unreachable)
 	}
 }

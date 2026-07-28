@@ -105,12 +105,24 @@ type Capability struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-// Health reports what zotgo can reach, as `doctor` sees it.
+// Health reports what zotgo can reach, as `doctor` sees it. Endpoint.Kind fixes
+// which of the endpoint-specific fields are present: a local probe carries
+// zoteroRunning/localApiEnabled, a web probe carries keyValid/userId, and the
+// other set is omitted rather than reported as a misleading false.
 type Health struct {
-	Endpoint        Endpoint `json:"endpoint"`
-	ZoteroRunning   bool     `json:"zoteroRunning"`
-	ZoteroVersion   string   `json:"zoteroVersion,omitempty"`
-	LocalAPIEnabled bool     `json:"localApiEnabled"`
+	Endpoint Endpoint `json:"endpoint"`
+	// Reachable is the shared liveness signal: the endpoint answered at all.
+	Reachable bool `json:"reachable"`
+
+	// Local endpoint only.
+	ZoteroRunning   *bool  `json:"zoteroRunning,omitempty"`
+	ZoteroVersion   string `json:"zoteroVersion,omitempty"`
+	LocalAPIEnabled *bool  `json:"localApiEnabled,omitempty"`
+
+	// Web endpoint only.
+	KeyValid *bool `json:"keyValid,omitempty"`
+	UserID   int64 `json:"userId,omitempty"`
+
 	// SchemaVersion and APIVersion are Zotero's, not zotgo's.
 	SchemaVersion string `json:"zoteroSchemaVersion,omitempty"`
 	APIVersion    string `json:"zoteroApiVersion,omitempty"`
@@ -222,16 +234,25 @@ func NewHealth(h zotero.Health) Health {
 			Reason:    s.Reason,
 		})
 	}
-	return Health{
-		Endpoint:        Endpoint{Kind: string(h.Endpoint.Kind), BaseURL: h.Endpoint.BaseURL},
-		ZoteroRunning:   h.ZoteroRunning,
-		ZoteroVersion:   h.ZoteroVersion,
-		LocalAPIEnabled: h.LocalAPIEnabled,
-		SchemaVersion:   h.SchemaVersion,
-		APIVersion:      h.APIVersion,
-		Ready:           h.Ready(),
-		Capabilities:    caps,
+	out := Health{
+		Endpoint:      Endpoint{Kind: string(h.Endpoint.Kind), BaseURL: h.Endpoint.BaseURL},
+		Reachable:     h.Reachable,
+		SchemaVersion: h.SchemaVersion,
+		APIVersion:    h.APIVersion,
+		Ready:         h.Ready(),
+		Capabilities:  caps,
 	}
+	if h.Endpoint.Kind == zotero.EndpointWeb {
+		keyValid := h.KeyValid
+		out.KeyValid = &keyValid
+		out.UserID = h.WebUserID
+	} else {
+		running, enabled := h.ZoteroRunning, h.LocalAPIEnabled
+		out.ZoteroRunning = &running
+		out.LocalAPIEnabled = &enabled
+		out.ZoteroVersion = h.ZoteroVersion
+	}
+	return out
 }
 
 func metaInt(raw json.RawMessage) int {

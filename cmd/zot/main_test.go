@@ -100,6 +100,27 @@ func fakeZotero(localAPIEnabled bool) *httptest.Server {
 	return httptest.NewServer(mux)
 }
 
+// fakeWebZotero stands in for api.zotero.org for the given user id: /keys/current
+// names the user, and the /api-less user routes serve items and collections.
+func fakeWebZotero(userID string) *httptest.Server {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /keys/current", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Zotero-API-Key") == "" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Zotero-API-Version", "3")
+		_, _ = w.Write([]byte(`{"userID":` + userID + `,"username":"ada","access":{"user":{"library":true,"write":false}}}`))
+	})
+	mux.HandleFunc("GET /users/"+userID+"/items/top", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Total-Results", "1")
+		_, _ = w.Write([]byte(`[
+			{"key":"WEBB0001","data":{"key":"WEBB0001","itemType":"journalArticle","title":"Remote paper"},"meta":{"creatorSummary":"Lovelace","parsedDate":"1843"}}
+		]`))
+	})
+	return httptest.NewServer(mux)
+}
+
 func runCLI(url string, args ...string) (string, string, error) {
 	var stdout, stderr bytes.Buffer
 	root := rootCommand()
@@ -132,6 +153,82 @@ func TestDoctorDisabledExitsNonZero(t *testing.T) {
 	}
 	if !strings.Contains(out, "Local API disabled") {
 		t.Errorf("output missing disabled guidance:\n%s", out)
+	}
+}
+
+func TestDoctorWebReady(t *testing.T) {
+	srv := fakeWebZotero("12345")
+	defer srv.Close()
+	t.Setenv("ZOTGO_API_KEY", "s3cret")
+
+	out, _, err := runCLI(srv.URL, "--web", "doctor")
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	for _, want := range []string{"web endpoint", "Web API reachable", "API key accepted (user 12345)", "Ready"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("doctor --web output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// --web without a key must fail early with an actionable message, before any I/O.
+func TestDoctorWebMissingKeyFails(t *testing.T) {
+	t.Setenv("ZOTGO_API_KEY", "")
+	_, _, err := runCLI("http://web.invalid", "--web", "doctor")
+	if err == nil || !strings.Contains(err.Error(), "ZOTGO_API_KEY") {
+		t.Fatalf("err = %v, want a ZOTGO_API_KEY message", err)
+	}
+}
+
+func TestDoctorWebJSON(t *testing.T) {
+	srv := fakeWebZotero("12345")
+	defer srv.Close()
+	t.Setenv("ZOTGO_API_KEY", "s3cret")
+
+	out, _, err := runCLI(srv.URL, "--json", "--web", "doctor")
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	var doc struct {
+		Data struct {
+			Ready           bool  `json:"ready"`
+			KeyValid        *bool `json:"keyValid"`
+			UserID          int64 `json:"userId"`
+			LocalAPIEnabled *bool `json:"localApiEnabled"`
+			Endpoint        struct {
+				Kind string `json:"kind"`
+			} `json:"endpoint"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatalf("not valid JSON: %v\n%s", err, out)
+	}
+	if doc.Data.Endpoint.Kind != "web" || !doc.Data.Ready {
+		t.Fatalf("doc = %+v", doc)
+	}
+	if doc.Data.KeyValid == nil || !*doc.Data.KeyValid || doc.Data.UserID != 12345 {
+		t.Errorf("keyValid/userId = %v/%d, want true/12345", doc.Data.KeyValid, doc.Data.UserID)
+	}
+	if doc.Data.LocalAPIEnabled != nil {
+		t.Errorf("web doctor leaked localApiEnabled = %v, want omitted", *doc.Data.LocalAPIEnabled)
+	}
+}
+
+// A read command must flow through the web profile end to end.
+func TestListWeb(t *testing.T) {
+	srv := fakeWebZotero("12345")
+	defer srv.Close()
+	t.Setenv("ZOTGO_API_KEY", "s3cret")
+
+	out, _, err := runCLI(srv.URL, "--web", "list")
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	for _, want := range []string{"WEBB0001", "Remote paper"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("list --web output missing %q:\n%s", want, out)
+		}
 	}
 }
 
