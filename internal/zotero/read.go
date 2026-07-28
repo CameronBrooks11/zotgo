@@ -47,21 +47,22 @@ type CollectionsOptions struct {
 // Items reads a single page of items.
 func (c *Client) Items(ctx context.Context, library LibraryRef, opts ItemsOptions) ([]Envelope, Page, error) {
 	var items []Envelope
-	page, err := c.getJSON(ctx, itemsPath(library, opts), itemValues(opts), &items)
+	page, err := c.getJSON(ctx, itemsPath(c.profile, library, opts), itemValues(opts), &items)
 	return items, page, err
 }
 
-// itemsPath is the Local API path for an item query, honoring the collection
-// scope and the top-level filter.
-func itemsPath(library LibraryRef, opts ItemsOptions) string {
+// itemsPath is the API path for an item query, honoring the collection scope and
+// the top-level filter. The endpoint's Profile fixes the library prefix.
+func itemsPath(profile Profile, library LibraryRef, opts ItemsOptions) string {
+	prefix := profile.LibraryPrefix(library)
 	if opts.Collection != "" {
-		path := library.Prefix() + "/collections/" + url.PathEscape(opts.Collection) + "/items"
+		path := prefix + "/collections/" + url.PathEscape(opts.Collection) + "/items"
 		if opts.Top {
 			path += "/top"
 		}
 		return path
 	}
-	path := library.Prefix() + "/items"
+	path := prefix + "/items"
 	if opts.Top {
 		path += "/top"
 	}
@@ -91,20 +92,20 @@ func (c *Client) AllItems(ctx context.Context, library LibraryRef, opts ItemsOpt
 // Item reads one item by key.
 func (c *Client) Item(ctx context.Context, library LibraryRef, key string) (Envelope, error) {
 	var item Envelope
-	_, err := c.getJSON(ctx, library.Prefix()+"/items/"+url.PathEscape(key), nil, &item)
+	_, err := c.getJSON(ctx, c.profile.LibraryPrefix(library)+"/items/"+url.PathEscape(key), nil, &item)
 	return item, err
 }
 
 // ItemChildren reads attachments and notes under a parent item.
 func (c *Client) ItemChildren(ctx context.Context, library LibraryRef, key string) ([]Envelope, Page, error) {
 	var children []Envelope
-	page, err := c.getJSON(ctx, library.Prefix()+"/items/"+url.PathEscape(key)+"/children", nil, &children)
+	page, err := c.getJSON(ctx, c.profile.LibraryPrefix(library)+"/items/"+url.PathEscape(key)+"/children", nil, &children)
 	return children, page, err
 }
 
 // Collections reads a single page of collections.
 func (c *Client) Collections(ctx context.Context, library LibraryRef, opts CollectionsOptions) ([]Envelope, Page, error) {
-	path := library.Prefix() + "/collections"
+	path := c.profile.LibraryPrefix(library) + "/collections"
 	if opts.Top {
 		path += "/top"
 	}

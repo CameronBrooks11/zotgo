@@ -1,5 +1,7 @@
 package zotero
 
+import "fmt"
+
 // EndpointKind distinguishes the endpoints zotgo can be pointed at.
 //
 // The durable axis is local vs remote, not read vs write: Zotero's Web API
@@ -11,17 +13,19 @@ type EndpointKind string
 const (
 	// EndpointLocal is a Zotero 7+ desktop app's HTTP server on this machine.
 	EndpointLocal EndpointKind = "local"
-	// EndpointWeb (api.zotero.org) is not implemented; it lands with the
-	// authenticated Web profile. Named here only so that switches over
-	// EndpointKind read as deliberate rather than accidental.
+	// EndpointWeb is the hosted Web API at api.zotero.org, reached with an API
+	// key. Its transport is implemented; the CLI wiring lands with v0.5.
 	EndpointWeb EndpointKind = "web"
 )
 
-// Profile is the identity of the endpoint a Client talks to.
+// Profile is the printable identity of the endpoint a Client talks to: its kind
+// and address, nothing more.
 //
-// It carries no authentication strategy and no server identity yet: the local
-// endpoint needs neither, and inventing either before the Web profile exists
-// would encode guesses rather than contracts.
+// It deliberately carries no credential. The Web API key lives on the Client's
+// Authenticator, not here, so a Profile is always safe to log or embed in
+// machine output without leaking a secret. It also carries no server identity:
+// Zotero-Server-ID was coined upstream but appears in no shipped Zotero, so
+// encoding it would be a guess (see working/plan.md §3).
 type Profile struct {
 	Kind    EndpointKind
 	BaseURL string
@@ -32,8 +36,28 @@ func LocalProfile(baseURL string) Profile {
 	return Profile{Kind: EndpointLocal, BaseURL: baseURL}
 }
 
+// WebProfile describes the hosted Web API at baseURL (api.zotero.org).
+func WebProfile(baseURL string) Profile {
+	return Profile{Kind: EndpointWeb, BaseURL: baseURL}
+}
+
+// LibraryPrefix is the API path prefix for a library's resources on this
+// endpoint. The Local API namespaces everything under /api and addresses the
+// logged-in user as the "0" sentinel; the Web API omits /api and uses the real
+// numeric user id carried by the LibraryRef.
+func (p Profile) LibraryPrefix(lib LibraryRef) string {
+	root := "/api"
+	if p.Kind == EndpointWeb {
+		root = ""
+	}
+	if lib.Kind == LibraryKindGroup {
+		return fmt.Sprintf("%s/groups/%d", root, lib.ID)
+	}
+	return fmt.Sprintf("%s/users/%d", root, lib.ID)
+}
+
 // Profile reports the endpoint this Client targets.
-func (c *Client) Profile() Profile { return LocalProfile(c.baseURL) }
+func (c *Client) Profile() Profile { return c.profile }
 
 // Capability is something an endpoint can do. It describes the *endpoint*, not
 // what zotgo has implemented against it: doctor answers "what does this Zotero
