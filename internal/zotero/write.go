@@ -170,3 +170,68 @@ func (c *Client) SetLocalKey(key string) {
 	c.localKey = key
 	c.mu.Unlock()
 }
+
+// MaxWriteObjects is the most objects the local write API accepts in one batch
+// (MAX_WRITE_OBJECTS upstream).
+const MaxWriteObjects = 50
+
+// WriteResult is the outcome of a batch write, mirroring the Web API v3 shape
+// the local endpoint reuses: objects that were written, ones left unchanged
+// because they already matched, and ones that failed, each keyed by the object's
+// index in the request.
+type WriteResult struct {
+	Successful map[string]Envelope     `json:"successful"`
+	Unchanged  map[string]string       `json:"unchanged"`
+	Failed     map[string]WriteFailure `json:"failed"`
+}
+
+// WriteFailure explains why one object in a batch was rejected.
+type WriteFailure struct {
+	Key     string `json:"key"`
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+// Ok reports whether every object in the batch was accepted.
+func (r WriteResult) Ok() bool { return len(r.Failed) == 0 }
+
+// FirstFailure returns a representative failure, or the zero value when none.
+func (r WriteResult) FirstFailure() WriteFailure {
+	for _, f := range r.Failed {
+		return f
+	}
+	return WriteFailure{}
+}
+
+func parseWriteResult(body []byte) (WriteResult, error) {
+	var r WriteResult
+	if err := json.Unmarshal(body, &r); err != nil {
+		return WriteResult{}, fmt.Errorf("parsing write response: %w", err)
+	}
+	return r, nil
+}
+
+// CreateItems creates items from their JSON representations in one batch write.
+// Each element is a Zotero item object (itemType plus fields); the caller builds
+// them. Creation carries no version precondition — there is nothing prior to
+// guard — so this is a batch POST, which the server treats as optional there.
+func (c *Client) CreateItems(ctx context.Context, lib LibraryRef, items []json.RawMessage) (WriteResult, error) {
+	if len(items) == 0 {
+		return WriteResult{}, nil
+	}
+	if len(items) > MaxWriteObjects {
+		return WriteResult{}, fmt.Errorf("%d items exceeds the %d-object write limit", len(items), MaxWriteObjects)
+	}
+	body, err := json.Marshal(items)
+	if err != nil {
+		return WriteResult{}, err
+	}
+	status, respBody, err := c.writeRequest(ctx, http.MethodPost, c.profile.LibraryPrefix(lib)+"/items", writeOptions{body: body})
+	if err != nil {
+		return WriteResult{}, err
+	}
+	if status != http.StatusOK {
+		return WriteResult{}, StatusError{StatusCode: status, Body: snippet(respBody)}
+	}
+	return parseWriteResult(respBody)
+}

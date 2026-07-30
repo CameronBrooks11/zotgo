@@ -181,3 +181,70 @@ func TestWriteRequest_SendsHeaders(t *testing.T) {
 		t.Errorf("headers = ver:%q key:%q serverID:%q, want 42/K/srv-9", gotVer, gotKey, gotServerID)
 	}
 }
+
+func TestParseWriteResult_WebV3Shape(t *testing.T) {
+	body := []byte(`{
+		"successful": {"0": {"key":"NEWKEY01","version":5,"data":{"key":"NEWKEY01","itemType":"book","title":"Made"}}},
+		"unchanged":  {"1": "OLDKEY02"},
+		"failed":     {"2": {"key":"BADKEY03","code":400,"message":"invalid field"}}
+	}`)
+	r, err := parseWriteResult(body)
+	if err != nil {
+		t.Fatalf("parseWriteResult: %v", err)
+	}
+	if r.Ok() {
+		t.Error("Ok() true despite a failure")
+	}
+	if r.Successful["0"].Key != "NEWKEY01" {
+		t.Errorf("successful key = %q", r.Successful["0"].Key)
+	}
+	if r.Unchanged["1"] != "OLDKEY02" {
+		t.Errorf("unchanged = %v", r.Unchanged)
+	}
+	if f := r.FirstFailure(); f.Code != 400 || f.Key != "BADKEY03" {
+		t.Errorf("failure = %+v", f)
+	}
+}
+
+func TestCreateItems_PostsBatchAndParses(t *testing.T) {
+	var gotMethod, gotKey string
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotKey = r.Header.Get("Zotero-API-Key")
+		gotBody, _ = io.ReadAll(r.Body)
+		_, _ = w.Write([]byte(`{"successful":{"0":{"key":"NEWKEY01","version":5,"data":{"itemType":"book"}}},"unchanged":{},"failed":{}}`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL)
+	c.SetLocalKey("K")
+	items := []json.RawMessage{json.RawMessage(`{"itemType":"book","title":"Made"}`)}
+	r, err := c.CreateItems(context.Background(), UserLibrary(), items)
+	if err != nil {
+		t.Fatalf("CreateItems: %v", err)
+	}
+	if gotMethod != http.MethodPost {
+		t.Errorf("method = %s, want POST", gotMethod)
+	}
+	if gotKey != "K" {
+		t.Errorf("api key = %q, want K", gotKey)
+	}
+	var sent []json.RawMessage
+	if err := json.Unmarshal(gotBody, &sent); err != nil || len(sent) != 1 {
+		t.Errorf("body not a 1-element array: %v (%s)", err, gotBody)
+	}
+	if !r.Ok() || r.Successful["0"].Key != "NEWKEY01" {
+		t.Errorf("result = %+v", r)
+	}
+}
+
+func TestCreateItems_RejectsOversizeBatch(t *testing.T) {
+	items := make([]json.RawMessage, MaxWriteObjects+1)
+	for i := range items {
+		items[i] = json.RawMessage(`{"itemType":"book"}`)
+	}
+	if _, err := New("http://x").CreateItems(context.Background(), UserLibrary(), items); err == nil {
+		t.Fatal("expected an over-limit error")
+	}
+}
