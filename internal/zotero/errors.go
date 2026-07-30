@@ -33,6 +33,19 @@ var (
 	// ErrInvalidAPIKey means the Web API rejected the API key, or it resolved to
 	// no user: it is missing, revoked, or wrong.
 	ErrInvalidAPIKey = errors.New("zotero web api key is invalid")
+	// ErrAuthorizeDenied means the user declined the local write authorization
+	// prompt in Zotero.
+	ErrAuthorizeDenied = errors.New("zotero write authorization denied")
+	// ErrWriteUnauthorized means a local write was rejected for a missing or
+	// consumed local API key (HTTP 401): re-authorize.
+	ErrWriteUnauthorized = errors.New("zotero local write not authorized")
+	// ErrPreconditionRequired means a required write precondition header was
+	// absent (HTTP 428): the Zotero-Server-ID or If-Unmodified-Since-Version.
+	ErrPreconditionRequired = errors.New("zotero write precondition required")
+	// ErrPreconditionFailed means a write precondition did not hold (HTTP 412):
+	// the Zotero-Server-ID no longer matches, or the library changed since the
+	// version the write was based on.
+	ErrPreconditionFailed = errors.New("zotero write precondition failed")
 )
 
 // StatusError preserves an unexpected non-2xx response from Zotero.

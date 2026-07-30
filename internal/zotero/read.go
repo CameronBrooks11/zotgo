@@ -205,6 +205,7 @@ func (c *Client) do(ctx context.Context, path string, values url.Values) ([]byte
 		if err != nil {
 			return nil, Page{}, classifyTransport(err)
 		}
+		c.captureServerID(resp.Header)
 		page := pageFromHeader(resp.Header)
 		body, readErr := io.ReadAll(resp.Body)
 		resp.Body.Close()

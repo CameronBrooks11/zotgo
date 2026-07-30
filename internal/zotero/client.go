@@ -12,6 +12,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -33,6 +34,17 @@ type Client struct {
 	// sleep waits for a duration or until ctx is cancelled. It is a field so
 	// tests can make rate-limit waits instant. Defaults to ctxSleep.
 	sleep func(ctx context.Context, d time.Duration) error
+
+	// mu guards the write-credential state below.
+	mu sync.RWMutex
+	// serverID is the Zotero-Server-ID captured from the most recent response.
+	// The local write endpoints require it echoed back, so the client caches it
+	// from every response and resends it on writes.
+	serverID string
+	// localKey is the local API key authorizing local writes (from Authorize).
+	// Empty until obtained; unrelated to a Web API key, and sent via the same
+	// Zotero-API-Key header only on local write requests.
+	localKey string
 }
 
 // Rate-limit handling for the Web API. The Local API never rate-limits, so these
@@ -130,6 +142,26 @@ func newClient(profile Profile, auth Authenticator, timeout time.Duration, opts 
 
 // BaseURL reports the address the client targets.
 func (c *Client) BaseURL() string { return c.profile.BaseURL }
+
+// captureServerID records a Zotero-Server-ID header for later resend on writes.
+// The Local API returns it on every response once it has the write endpoints;
+// older builds and the Web API send nothing, which leaves the cache untouched.
+func (c *Client) captureServerID(h http.Header) {
+	id := h.Get("Zotero-Server-ID")
+	if id == "" {
+		return
+	}
+	c.mu.Lock()
+	c.serverID = id
+	c.mu.Unlock()
+}
+
+// ServerID reports the most recently seen Zotero-Server-ID, or "" if none.
+func (c *Client) ServerID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.serverID
+}
 
 // get issues a GET against the endpoint's base URL + path, carrying the API
 // version and whatever credential the endpoint requires. The caller owns the
