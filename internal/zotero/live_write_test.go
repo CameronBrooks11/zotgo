@@ -107,4 +107,45 @@ func TestLiveWriteRoundTrip(t *testing.T) {
 	if _, err := c.Item(ctx, lib, created.Key); err != ErrNotFound {
 		t.Errorf("item still present after delete: err = %v", err)
 	}
+
+	// Collections: create, rename, delete under the same authorization.
+	cres, err := c.CreateCollections(ctx, lib, []json.RawMessage{json.RawMessage(`{"name":"zotgo live coll","parentCollection":false}`)})
+	if err != nil {
+		t.Fatalf("CreateCollections: %v", err)
+	}
+	if !cres.Ok() {
+		t.Fatalf("collection create failed: %+v", cres.FirstFailure())
+	}
+	ck := cres.Successful["0"].Key
+	if err := c.PatchCollection(ctx, lib, ck, json.RawMessage(`{"name":"zotgo live renamed"}`), libraryVersion(t, c, lib)); err != nil {
+		t.Fatalf("PatchCollection: %v", err)
+	}
+	col, err := c.Collection(ctx, lib, ck)
+	if err != nil {
+		t.Fatalf("read collection: %v", err)
+	}
+	if data, _ := col.CollectionData(); data.Name != "zotgo live renamed" {
+		t.Errorf("renamed collection name = %q, want zotgo live renamed", data.Name)
+	}
+	if err := c.DeleteCollections(ctx, lib, []string{ck}, libraryVersion(t, c, lib)); err != nil {
+		t.Fatalf("DeleteCollections: %v", err)
+	}
+
+	// Tags: create a tagged item, strip the tag library-wide, confirm it's gone.
+	tres, err := c.CreateItems(ctx, lib, []json.RawMessage{json.RawMessage(`{"itemType":"book","title":"zotgo live tag","tags":[{"tag":"zotgolivetag"}]}`)})
+	if err != nil {
+		t.Fatalf("create tagged item: %v", err)
+	}
+	tk := tres.Successful["0"].Key
+	if err := c.DeleteTags(ctx, lib, []string{"zotgolivetag"}, libraryVersion(t, c, lib)); err != nil {
+		t.Fatalf("DeleteTags: %v", err)
+	}
+	after, err := c.Item(ctx, lib, tk)
+	if err != nil {
+		t.Fatalf("read after tag delete: %v", err)
+	}
+	if d, _ := after.ItemData(); len(d.Tags) != 0 {
+		t.Errorf("tag survived library-wide delete: %+v", d.Tags)
+	}
+	_ = c.DeleteItems(ctx, lib, []string{tk}, libraryVersion(t, c, lib)) // cleanup
 }
