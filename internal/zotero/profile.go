@@ -24,8 +24,8 @@ const (
 // It deliberately carries no credential. The Web API key lives on the Client's
 // Authenticator, not here, so a Profile is always safe to log or embed in
 // machine output without leaking a secret. It also carries no server identity:
-// Zotero-Server-ID was coined upstream but appears in no shipped Zotero, so
-// encoding it would be a guess (see working/plan.md §3).
+// the Zotero-Server-ID a write-capable build returns is a runtime value the
+// Client caches for writes, not part of the endpoint's stable identity.
 type Profile struct {
 	Kind    EndpointKind
 	BaseURL string
