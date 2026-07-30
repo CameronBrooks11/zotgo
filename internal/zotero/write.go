@@ -37,6 +37,13 @@ type writeOptions struct {
 // then maps the write-specific status codes onto the error taxonomy. It returns
 // the status and body for the caller to interpret on success (2xx).
 func (c *Client) writeRequest(ctx context.Context, method, path string, opts writeOptions) (int, []byte, error) {
+	// Every write must echo Zotero-Server-ID (428 without it). Bootstrap it here
+	// rather than in the caller, so a write works even when no prior read or
+	// Authorize populated the cache — e.g. a fresh process reusing a stored key.
+	if err := c.ensureServerID(ctx); err != nil {
+		return 0, nil, err
+	}
+
 	var body io.Reader
 	if opts.body != nil {
 		body = bytes.NewReader(opts.body)
@@ -121,9 +128,6 @@ func (c *Client) Authorize(ctx context.Context, appName string) (remember bool, 
 	if c.profile.Kind != EndpointLocal {
 		return false, fmt.Errorf("authorize is only available on the local endpoint")
 	}
-	if err := c.ensureServerID(ctx); err != nil {
-		return false, err
-	}
 
 	reqBody, err := json.Marshal(map[string]string{"appName": appName})
 	if err != nil {
@@ -171,6 +175,14 @@ func (c *Client) SetLocalKey(key string) {
 	c.mu.Lock()
 	c.localKey = key
 	c.mu.Unlock()
+}
+
+// LocalKey returns the client's local API key, for a caller that wants to
+// persist a freshly authorized one. Empty when none is held.
+func (c *Client) LocalKey() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.localKey
 }
 
 // MaxWriteObjects is the most objects the local write API accepts in one batch

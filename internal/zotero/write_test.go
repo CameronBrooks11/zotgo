@@ -80,6 +80,41 @@ type authorizeRecord struct {
 	gotAppName  string
 }
 
+// primeServerID gives the client a cached Zotero-Server-ID, as a real write
+// client always has from a prior read (or Authorize) before it writes.
+func primeServerID(c *Client) {
+	h := http.Header{}
+	h.Set("Zotero-Server-ID", "srv-test")
+	c.captureServerID(h)
+}
+
+// A write from a fresh process (stored key, no prior read) must still bootstrap
+// and send Zotero-Server-ID — writes 428 without it. Regression: previously only
+// Authorize bootstrapped it, so a persisted-key write failed against real Zotero.
+func TestWriteRequest_BootstrapsServerIDWhenUncached(t *testing.T) {
+	var gotServerID string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Zotero-Server-ID", "srv-boot")
+		_, _ = w.Write([]byte("{}"))
+	})
+	mux.HandleFunc("/api/users/0/items", func(w http.ResponseWriter, r *http.Request) {
+		gotServerID = r.Header.Get("Zotero-Server-ID")
+		_, _ = w.Write([]byte(`{"successful":{},"unchanged":{},"failed":{}}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := New(srv.URL)
+	c.SetLocalKey("K") // no prior read; Server-ID is not cached yet
+	if _, err := c.CreateItems(context.Background(), UserLibrary(), []json.RawMessage{json.RawMessage(`{"itemType":"book"}`)}); err != nil {
+		t.Fatalf("CreateItems: %v", err)
+	}
+	if gotServerID != "srv-boot" {
+		t.Errorf("write sent Zotero-Server-ID %q, want srv-boot (bootstrapped via GET /api/)", gotServerID)
+	}
+}
+
 func TestAuthorize_ApprovedStoresKeyAndBootstrapsServerID(t *testing.T) {
 	srv, rec := authorizeFake(t, true)
 	defer srv.Close()
@@ -148,6 +183,7 @@ func TestWriteRequest_MapsPreconditionStatuses(t *testing.T) {
 			w.WriteHeader(tc.status)
 		}))
 		c := New(srv.URL)
+		primeServerID(c) // a real write client already has one; isolate the write itself
 		_, _, err := c.writeRequest(context.Background(), http.MethodDelete, "/api/users/0/items/AAAA1111", writeOptions{})
 		if !errors.Is(err, tc.want) {
 			t.Errorf("status %d → %v, want %v", tc.status, err, tc.want)
@@ -284,6 +320,7 @@ func TestPatchItem_ConflictSurfaces(t *testing.T) {
 	defer srv.Close()
 	c := New(srv.URL)
 	c.SetLocalKey("K")
+	primeServerID(c)
 	err := c.PatchItem(context.Background(), UserLibrary(), "AAAA1111", json.RawMessage(`{}`), 1)
 	if !errors.Is(err, ErrPreconditionFailed) {
 		t.Fatalf("err = %v, want ErrPreconditionFailed", err)
