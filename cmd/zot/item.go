@@ -24,6 +24,9 @@ func itemCommand() *cli.Command {
 		Usage: "create and modify items (local endpoint only)",
 		Commands: []*cli.Command{
 			itemCreateCommand(),
+			itemPatchCommand(),
+			itemDeleteCommand(),
+			itemTemplateCommand(),
 		},
 	}
 }
@@ -224,4 +227,227 @@ func orDash(s string) string {
 		return "—"
 	}
 	return s
+}
+
+func itemTemplateCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "template",
+		Usage:     "print a blank item skeleton for an item type, to fill in and pipe to `item create`",
+		ArgsUsage: "<item-type>",
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			itemType := cmd.Args().First()
+			if itemType == "" {
+				return errors.New("missing item type (e.g. zot item template book)")
+			}
+			if cmd.Bool("web") {
+				return errors.New("item template uses the local endpoint")
+			}
+			c, err := newClient(cmd)
+			if err != nil {
+				return err
+			}
+			tpl, err := c.ItemTemplate(ctx, itemType)
+			if err != nil {
+				return friendly(err)
+			}
+			var pretty bytes.Buffer
+			if err := json.Indent(&pretty, tpl, "", "  "); err != nil {
+				return err
+			}
+			fmt.Fprintln(out(cmd), pretty.String())
+			return nil
+		},
+	}
+}
+
+func itemPatchCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "patch",
+		Usage:     "update fields of one item from a JSON object on stdin or --file",
+		ArgsUsage: "<item-key>",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "file", Aliases: []string{"f"}, Usage: "read the patch JSON from this file instead of stdin"},
+			&cli.BoolFlag{Name: "dry-run", Usage: "show what would change without writing"},
+			&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "skip the confirmation prompt"},
+		},
+		Action: itemPatchAction,
+	}
+}
+
+func itemPatchAction(ctx context.Context, cmd *cli.Command) error {
+	if cmd.Bool("web") {
+		return errors.New("writes are local-only; the --web profile is read-only")
+	}
+	key := cmd.Args().First()
+	if key == "" {
+		return errors.New("missing item key (usage: zot item patch <item-key>)")
+	}
+	file := cmd.String("file")
+	fromStdin := file == ""
+	raw, err := readItemInput(file)
+	if err != nil {
+		return err
+	}
+	patch, err := parsePatchInput(raw)
+	if err != nil {
+		return err
+	}
+
+	c, lib, err := resolveLibrary(ctx, cmd)
+	if err != nil {
+		return err
+	}
+	if k := loadLocalKey(); k != "" {
+		c.SetLocalKey(k)
+	}
+
+	item, err := c.Item(ctx, lib, key)
+	if err != nil {
+		if errors.Is(err, zotero.ErrNotFound) {
+			return fmt.Errorf("no item with key %q in %s", key, lib.Name)
+		}
+		return friendly(err)
+	}
+
+	w := out(cmd)
+	fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
+	fmt.Fprintf(w, "Patching %s (%s): %s\n", key, item.ItemType(), orDash(item.Title()))
+	fmt.Fprintf(w, "  fields: %s\n", strings.Join(patchFields(patch), ", "))
+
+	if cmd.Bool("dry-run") {
+		fmt.Fprintln(w, "\nDry run — nothing was written.")
+		return nil
+	}
+	if !cmd.Bool("yes") {
+		if fromStdin {
+			return errors.New("the patch was read from stdin, so I cannot prompt — re-run with --yes (or --dry-run), or use --file")
+		}
+		if !confirm(os.Stdin, w, fmt.Sprintf("Patch %s?", key)) {
+			fmt.Fprintln(w, "Aborted.")
+			return nil
+		}
+	}
+
+	if err := ensureLocalKey(ctx, c); err != nil {
+		return err
+	}
+	version, err := c.LibraryVersion(ctx, lib)
+	if err != nil {
+		return friendly(err)
+	}
+	if err := c.PatchItem(ctx, lib, key, patch, version); err != nil {
+		return writeFriendly(err)
+	}
+	fmt.Fprintf(w, "patched %s\n", key)
+	return nil
+}
+
+func itemDeleteCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "delete",
+		Usage:     "delete one or more items by key (destructive)",
+		ArgsUsage: "<item-key>...",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "dry-run", Usage: "show what would be deleted without deleting"},
+			&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "skip the confirmation prompt"},
+		},
+		Action: itemDeleteAction,
+	}
+}
+
+func itemDeleteAction(ctx context.Context, cmd *cli.Command) error {
+	if cmd.Bool("web") {
+		return errors.New("writes are local-only; the --web profile is read-only")
+	}
+	keys := cmd.Args().Slice()
+	if len(keys) == 0 {
+		return errors.New("missing item key(s) (usage: zot item delete <item-key>...)")
+	}
+	if len(keys) > zotero.MaxDeleteObjects {
+		return fmt.Errorf("%d keys exceeds the %d-item delete limit", len(keys), zotero.MaxDeleteObjects)
+	}
+
+	c, lib, err := resolveLibrary(ctx, cmd)
+	if err != nil {
+		return err
+	}
+	if k := loadLocalKey(); k != "" {
+		c.SetLocalKey(k)
+	}
+
+	w := out(cmd)
+	fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
+	fmt.Fprintln(w, "Will delete:")
+	var found []string
+	for _, key := range keys {
+		item, err := c.Item(ctx, lib, key)
+		if errors.Is(err, zotero.ErrNotFound) {
+			fmt.Fprintf(w, "  ! %s — not found, skipping\n", key)
+			continue
+		}
+		if err != nil {
+			return friendly(err)
+		}
+		found = append(found, key)
+		fmt.Fprintf(w, "  - %s (%s): %s\n", key, item.ItemType(), orDash(item.Title()))
+	}
+	if len(found) == 0 {
+		fmt.Fprintln(w, "Nothing to delete.")
+		return nil
+	}
+
+	if cmd.Bool("dry-run") {
+		fmt.Fprintln(w, "\nDry run — nothing was deleted.")
+		return nil
+	}
+	if !cmd.Bool("yes") {
+		if !confirm(os.Stdin, w, fmt.Sprintf("Delete %d item(s)? This cannot be undone.", len(found))) {
+			fmt.Fprintln(w, "Aborted.")
+			return nil
+		}
+	}
+
+	if err := ensureLocalKey(ctx, c); err != nil {
+		return err
+	}
+	version, err := c.LibraryVersion(ctx, lib)
+	if err != nil {
+		return friendly(err)
+	}
+	if err := c.DeleteItems(ctx, lib, found, version); err != nil {
+		return writeFriendly(err)
+	}
+	fmt.Fprintf(w, "deleted %d item(s)\n", len(found))
+	return nil
+}
+
+// parsePatchInput requires a single JSON object of fields to change.
+func parsePatchInput(raw []byte) (json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return nil, errors.New("no patch JSON provided")
+	}
+	if trimmed[0] != '{' {
+		return nil, errors.New("a patch must be a JSON object of fields to change")
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &m); err != nil {
+		return nil, fmt.Errorf("invalid patch JSON: %w", err)
+	}
+	if len(m) == 0 {
+		return nil, errors.New("the patch is empty")
+	}
+	return json.RawMessage(trimmed), nil
+}
+
+// patchFields lists the field names a patch will set, in a stable order.
+func patchFields(patch json.RawMessage) []string {
+	var m map[string]json.RawMessage
+	_ = json.Unmarshal(patch, &m)
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

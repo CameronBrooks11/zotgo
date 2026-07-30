@@ -103,3 +103,26 @@ func mustEnvelope(s string) zotero.Envelope {
 	_ = json.Unmarshal([]byte(s), &e)
 	return e
 }
+
+func TestParsePatchInput(t *testing.T) {
+	if _, err := parsePatchInput([]byte(`{"title":"New"}`)); err != nil {
+		t.Errorf("valid object → %v", err)
+	}
+	for name, in := range map[string]string{
+		"array":   `[{"title":"x"}]`,
+		"empty":   `   `,
+		"emptyOb": `{}`,
+		"bad":     `{nope`,
+	} {
+		if _, err := parsePatchInput([]byte(in)); err == nil {
+			t.Errorf("%s should error", name)
+		}
+	}
+}
+
+func TestPatchFields_Sorted(t *testing.T) {
+	got := patchFields(json.RawMessage(`{"title":"a","abstractNote":"b","date":"c"}`))
+	if strings.Join(got, ",") != "abstractNote,date,title" {
+		t.Errorf("patchFields = %v, want sorted", got)
+	}
+}
