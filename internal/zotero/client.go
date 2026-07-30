@@ -41,6 +41,10 @@ type Client struct {
 	// The local write endpoints require it echoed back, so the client caches it
 	// from every response and resends it on writes.
 	serverID string
+	// localKey is the local API key authorizing local writes (from Authorize).
+	// Empty until obtained; unrelated to a Web API key, and sent via the same
+	// Zotero-API-Key header only on local write requests.
+	localKey string
 }
 
 // Rate-limit handling for the Web API. The Local API never rate-limits, so these

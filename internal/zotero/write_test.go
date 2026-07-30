@@ -2,6 +2,9 @@ package zotero
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -39,5 +42,142 @@ func TestServerID_CapturedFromReads(t *testing.T) {
 	}
 	if c.ServerID() != "srv-xyz-1" {
 		t.Errorf("ServerID = %q, want srv-xyz-1", c.ServerID())
+	}
+}
+
+// authorizeFake mirrors the merged local write bootstrap: /api/ hands out the
+// Zotero-Server-ID, and /api/local/authorize requires that header echoed back
+// and an appName, then approves or denies per `approve`.
+func authorizeFake(t *testing.T, approve bool) (*httptest.Server, *authorizeRecord) {
+	t.Helper()
+	rec := &authorizeRecord{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Zotero-Server-ID", "srv-1")
+		_, _ = w.Write([]byte("{}"))
+	})
+	mux.HandleFunc("/api/local/authorize", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Zotero-Server-ID", "srv-1")
+		rec.gotServerID = r.Header.Get("Zotero-Server-ID")
+		rec.gotAPIKey = r.Header.Get("Zotero-API-Key")
+		body, _ := io.ReadAll(r.Body)
+		var parsed map[string]string
+		_ = json.Unmarshal(body, &parsed)
+		rec.gotAppName = parsed["appName"]
+		if !approve {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"denied":true}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"key":"LOCALKEY123","remember":true}`))
+	})
+	return httptest.NewServer(mux), rec
+}
+
+type authorizeRecord struct {
+	gotServerID string
+	gotAPIKey   string
+	gotAppName  string
+}
+
+func TestAuthorize_ApprovedStoresKeyAndBootstrapsServerID(t *testing.T) {
+	srv, rec := authorizeFake(t, true)
+	defer srv.Close()
+	c := New(srv.URL)
+
+	remember, err := c.Authorize(context.Background(), "zotgo")
+	if err != nil {
+		t.Fatalf("Authorize: %v", err)
+	}
+	if !remember {
+		t.Error("remember = false, want true")
+	}
+	if !c.HasLocalKey() {
+		t.Error("key was not stored after approval")
+	}
+	// The bootstrap must have supplied the Server-ID the write endpoint requires.
+	if rec.gotServerID != "srv-1" {
+		t.Errorf("authorize sent Zotero-Server-ID %q, want srv-1", rec.gotServerID)
+	}
+	// Authorize is keyless — it is how the key is obtained.
+	if rec.gotAPIKey != "" {
+		t.Errorf("authorize sent an API key %q, want none", rec.gotAPIKey)
+	}
+	if rec.gotAppName != "zotgo" {
+		t.Errorf("appName = %q, want zotgo", rec.gotAppName)
+	}
+}
+
+func TestAuthorize_DeniedReturnsSentinel(t *testing.T) {
+	srv, _ := authorizeFake(t, false)
+	defer srv.Close()
+	c := New(srv.URL)
+
+	if _, err := c.Authorize(context.Background(), "zotgo"); !errors.Is(err, ErrAuthorizeDenied) {
+		t.Fatalf("err = %v, want ErrAuthorizeDenied", err)
+	}
+	if c.HasLocalKey() {
+		t.Error("a denied authorization must not store a key")
+	}
+}
+
+// SetLocalKey lets a caller reuse a remembered key without re-prompting.
+func TestSetLocalKey(t *testing.T) {
+	c := New("http://localhost:23119")
+	if c.HasLocalKey() {
+		t.Fatal("fresh client should hold no key")
+	}
+	c.SetLocalKey("REMEMBERED")
+	if !c.HasLocalKey() {
+		t.Error("SetLocalKey did not install the key")
+	}
+}
+
+// writeRequest maps the write-specific status codes onto the error taxonomy.
+func TestWriteRequest_MapsPreconditionStatuses(t *testing.T) {
+	cases := []struct {
+		status int
+		want   error
+	}{
+		{http.StatusUnauthorized, ErrWriteUnauthorized},
+		{http.StatusPreconditionRequired, ErrPreconditionRequired},
+		{http.StatusPreconditionFailed, ErrPreconditionFailed},
+	}
+	for _, tc := range cases {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(tc.status)
+		}))
+		c := New(srv.URL)
+		_, _, err := c.writeRequest(context.Background(), http.MethodDelete, "/api/users/0/items/AAAA1111", writeOptions{})
+		if !errors.Is(err, tc.want) {
+			t.Errorf("status %d → %v, want %v", tc.status, err, tc.want)
+		}
+		srv.Close()
+	}
+}
+
+// The precondition header and Server-ID must ride on a write when set.
+func TestWriteRequest_SendsHeaders(t *testing.T) {
+	var gotVer, gotKey, gotServerID string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotVer = r.Header.Get("If-Unmodified-Since-Version")
+		gotKey = r.Header.Get("Zotero-API-Key")
+		gotServerID = r.Header.Get("Zotero-Server-ID")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL)
+	c.SetLocalKey("K")
+	idHeader := http.Header{}
+	idHeader.Set("Zotero-Server-ID", "srv-9")
+	c.captureServerID(idHeader)
+	ver := 42
+	if _, _, err := c.writeRequest(context.Background(), http.MethodDelete, "/api/users/0/items/AAAA1111",
+		writeOptions{ifUnmodifiedSince: &ver}); err != nil {
+		t.Fatalf("writeRequest: %v", err)
+	}
+	if gotVer != "42" || gotKey != "K" || gotServerID != "srv-9" {
+		t.Errorf("headers = ver:%q key:%q serverID:%q, want 42/K/srv-9", gotVer, gotKey, gotServerID)
 	}
 }
