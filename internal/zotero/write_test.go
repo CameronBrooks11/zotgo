@@ -248,3 +248,80 @@ func TestCreateItems_RejectsOversizeBatch(t *testing.T) {
 		t.Fatal("expected an over-limit error")
 	}
 }
+
+func TestPatchItem_SendsPatchVersionAndSucceedsOn204(t *testing.T) {
+	var gotMethod, gotVer, gotPath string
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotVer = r.Header.Get("If-Unmodified-Since-Version")
+		gotBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL)
+	c.SetLocalKey("K")
+	if err := c.PatchItem(context.Background(), UserLibrary(), "AAAA1111", json.RawMessage(`{"title":"New"}`), 12); err != nil {
+		t.Fatalf("PatchItem: %v", err)
+	}
+	if gotMethod != http.MethodPatch || gotPath != "/api/users/0/items/AAAA1111" {
+		t.Errorf("%s %s, want PATCH /api/users/0/items/AAAA1111", gotMethod, gotPath)
+	}
+	if gotVer != "12" {
+		t.Errorf("If-Unmodified-Since-Version = %q, want 12 (required for single writes)", gotVer)
+	}
+	if string(gotBody) != `{"title":"New"}` {
+		t.Errorf("body = %s", gotBody)
+	}
+}
+
+// A concurrent edit surfaces as ErrPreconditionFailed rather than silent loss.
+func TestPatchItem_ConflictSurfaces(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusPreconditionFailed)
+	}))
+	defer srv.Close()
+	c := New(srv.URL)
+	c.SetLocalKey("K")
+	err := c.PatchItem(context.Background(), UserLibrary(), "AAAA1111", json.RawMessage(`{}`), 1)
+	if !errors.Is(err, ErrPreconditionFailed) {
+		t.Fatalf("err = %v, want ErrPreconditionFailed", err)
+	}
+}
+
+func TestDeleteItems_SendsKeysAndVersion(t *testing.T) {
+	var gotMethod, gotVer, gotKeys string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotVer = r.Header.Get("If-Unmodified-Since-Version")
+		gotKeys = r.URL.Query().Get("itemKey")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL)
+	c.SetLocalKey("K")
+	if err := c.DeleteItems(context.Background(), UserLibrary(), []string{"AAAA1111", "BBBB2222"}, 7); err != nil {
+		t.Fatalf("DeleteItems: %v", err)
+	}
+	if gotMethod != http.MethodDelete {
+		t.Errorf("method = %s, want DELETE", gotMethod)
+	}
+	if gotKeys != "AAAA1111,BBBB2222" {
+		t.Errorf("itemKey = %q", gotKeys)
+	}
+	if gotVer != "7" {
+		t.Errorf("version = %q, want 7", gotVer)
+	}
+}
+
+func TestDeleteItems_RejectsOversize(t *testing.T) {
+	keys := make([]string, MaxDeleteObjects+1)
+	for i := range keys {
+		keys[i] = "KEY"
+	}
+	if err := New("http://x").DeleteItems(context.Background(), UserLibrary(), keys, 1); err == nil {
+		t.Fatal("expected an over-limit error")
+	}
+}

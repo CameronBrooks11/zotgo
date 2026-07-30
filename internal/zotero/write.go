@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -234,4 +236,50 @@ func (c *Client) CreateItems(ctx context.Context, lib LibraryRef, items []json.R
 		return WriteResult{}, StatusError{StatusCode: status, Body: snippet(respBody)}
 	}
 	return parseWriteResult(respBody)
+}
+
+// MaxDeleteObjects is the most keys accepted in one multi-delete (upstream
+// MAX_DELETE_OBJECTS).
+const MaxDeleteObjects = 50
+
+// PatchItem applies a partial update to one item: patch is a JSON object of the
+// fields to change. Single-object writes require the version precondition, so
+// ifUnmodifiedSince guards against a concurrent edit (412 → ErrPreconditionFailed).
+// Success is 204.
+func (c *Client) PatchItem(ctx context.Context, lib LibraryRef, key string, patch json.RawMessage, ifUnmodifiedSince int) error {
+	path := c.profile.LibraryPrefix(lib) + "/items/" + url.PathEscape(key)
+	status, body, err := c.writeRequest(ctx, http.MethodPatch, path, writeOptions{
+		body:              patch,
+		ifUnmodifiedSince: &ifUnmodifiedSince,
+	})
+	if err != nil {
+		return err
+	}
+	if status != http.StatusNoContent {
+		return StatusError{StatusCode: status, Body: snippet(body)}
+	}
+	return nil
+}
+
+// DeleteItems removes items by key in one request (itemKey=…), guarded by the
+// required version precondition. Success is 204.
+func (c *Client) DeleteItems(ctx context.Context, lib LibraryRef, keys []string, ifUnmodifiedSince int) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	if len(keys) > MaxDeleteObjects {
+		return fmt.Errorf("%d keys exceeds the %d-object delete limit", len(keys), MaxDeleteObjects)
+	}
+	q := url.Values{"itemKey": {strings.Join(keys, ",")}}
+	path := c.profile.LibraryPrefix(lib) + "/items?" + q.Encode()
+	status, body, err := c.writeRequest(ctx, http.MethodDelete, path, writeOptions{
+		ifUnmodifiedSince: &ifUnmodifiedSince,
+	})
+	if err != nil {
+		return err
+	}
+	if status != http.StatusNoContent {
+		return StatusError{StatusCode: status, Body: snippet(body)}
+	}
+	return nil
 }
