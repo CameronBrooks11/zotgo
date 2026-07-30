@@ -112,11 +112,12 @@ allows it; `zot` still does not write today).
 The local and Web endpoints are separate: `zot` never silently falls back from
 one to the other, and `--web` is always explicit.
 
-### Writing items (local)
+### Writing (local)
 
-`zot item` creates and modifies items on the **local** endpoint. Writes need a
-Zotero build with the local write API (`zotero/zotero#5015`); older builds are
-read-only, and `zot doctor` reports which you have under the `write` capability.
+`zot item`, `zot collection`, and `zot tag` create and modify data on the
+**local** endpoint. Writes need a Zotero build with the local write API
+(`zotero/zotero#5015`); older builds are read-only, and `zot doctor` reports
+which you have under the `write` capability.
 
 ```bash
 zot item template book                     # a blank skeleton to fill in
@@ -124,6 +125,14 @@ zot item template book > b.json && $EDITOR b.json
 zot item create --file b.json              # create (also reads stdin)
 zot item patch KEY < patch.json            # partial update; other fields untouched
 zot item delete KEY1 KEY2                   # destructive; lists what it will remove
+
+zot collection create "Smart Grid" -p PARENTKEY   # -p is optional
+zot collection rename KEY "New Name"
+zot collection delete KEY                   # the collection's items are kept
+
+zot tag add urgent todo --item ITEMKEY      # add/remove tags on one item
+zot tag remove todo --item ITEMKEY
+zot tag delete urgent                       # remove a tag from EVERY item (library-wide)
 ```
 
 Every write **surfaces the target library, shows what it will do, and asks to

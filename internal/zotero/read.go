@@ -117,6 +117,13 @@ func (c *Client) Item(ctx context.Context, library LibraryRef, key string) (Enve
 	return item, err
 }
 
+// Collection reads one collection by key.
+func (c *Client) Collection(ctx context.Context, library LibraryRef, key string) (Envelope, error) {
+	var col Envelope
+	_, err := c.getJSON(ctx, c.profile.LibraryPrefix(library)+"/collections/"+url.PathEscape(key), nil, &col)
+	return col, err
+}
+
 // ItemChildren reads attachments and notes under a parent item.
 func (c *Client) ItemChildren(ctx context.Context, library LibraryRef, key string) ([]Envelope, Page, error) {
 	var children []Envelope

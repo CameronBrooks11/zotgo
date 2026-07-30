@@ -362,3 +362,92 @@ func TestDeleteItems_RejectsOversize(t *testing.T) {
 		t.Fatal("expected an over-limit error")
 	}
 }
+
+func TestCreateCollections_PostsToCollectionsRoute(t *testing.T) {
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		_, _ = w.Write([]byte(`{"successful":{"0":{"key":"COLL0001","version":3,"data":{"name":"New"}}},"unchanged":{},"failed":{}}`))
+	}))
+	defer srv.Close()
+	c := New(srv.URL)
+	c.SetLocalKey("K")
+	primeServerID(c)
+
+	res, err := c.CreateCollections(context.Background(), UserLibrary(), []json.RawMessage{json.RawMessage(`{"name":"New","parentCollection":false}`)})
+	if err != nil {
+		t.Fatalf("CreateCollections: %v", err)
+	}
+	if gotMethod != http.MethodPost || gotPath != "/api/users/0/collections" {
+		t.Errorf("%s %s, want POST /api/users/0/collections", gotMethod, gotPath)
+	}
+	if res.Successful["0"].Key != "COLL0001" {
+		t.Errorf("created key = %q", res.Successful["0"].Key)
+	}
+}
+
+func TestPatchCollection_SendsPatchAndVersion(t *testing.T) {
+	var gotMethod, gotPath, gotVer string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotVer = r.Header.Get("If-Unmodified-Since-Version")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	c := New(srv.URL)
+	c.SetLocalKey("K")
+	primeServerID(c)
+
+	if err := c.PatchCollection(context.Background(), UserLibrary(), "COLL0001", json.RawMessage(`{"name":"Renamed"}`), 4); err != nil {
+		t.Fatalf("PatchCollection: %v", err)
+	}
+	if gotMethod != http.MethodPatch || gotPath != "/api/users/0/collections/COLL0001" || gotVer != "4" {
+		t.Errorf("%s %s v=%s, want PATCH …/collections/COLL0001 v=4", gotMethod, gotPath, gotVer)
+	}
+}
+
+func TestDeleteCollections_UsesCollectionKeyParam(t *testing.T) {
+	var gotKeys string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotKeys = r.URL.Query().Get("collectionKey")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	c := New(srv.URL)
+	c.SetLocalKey("K")
+	primeServerID(c)
+
+	if err := c.DeleteCollections(context.Background(), UserLibrary(), []string{"COLL0001", "COLL0002"}, 5); err != nil {
+		t.Fatalf("DeleteCollections: %v", err)
+	}
+	if gotKeys != "COLL0001,COLL0002" {
+		t.Errorf("collectionKey = %q", gotKeys)
+	}
+}
+
+func TestDeleteTags_JoinsNamesWithDoublePipe(t *testing.T) {
+	var gotMethod, gotPath, gotTag, gotVer string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotTag = r.URL.Query().Get("tag") // decoded by net/http
+		gotVer = r.Header.Get("If-Unmodified-Since-Version")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	c := New(srv.URL)
+	c.SetLocalKey("K")
+	primeServerID(c)
+
+	if err := c.DeleteTags(context.Background(), UserLibrary(), []string{"todo", "to read"}, 6); err != nil {
+		t.Fatalf("DeleteTags: %v", err)
+	}
+	if gotMethod != http.MethodDelete || gotPath != "/api/users/0/tags" {
+		t.Errorf("%s %s, want DELETE /api/users/0/tags", gotMethod, gotPath)
+	}
+	if gotTag != "todo||to read" {
+		t.Errorf("tag = %q, want 'todo||to read'", gotTag)
+	}
+	if gotVer != "6" {
+		t.Errorf("version = %q, want 6", gotVer)
+	}
+}

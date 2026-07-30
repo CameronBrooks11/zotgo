@@ -90,6 +90,8 @@ func rootCommand() *cli.Command {
 			statsCommand(),
 			exportCommand(),
 			itemCommand(),
+			collectionCommand(),
+			tagCommand(),
 		},
 	}
 }

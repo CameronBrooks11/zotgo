@@ -14,8 +14,8 @@ project. Tool-specific files (for example the root `CLAUDE.md`) point here.
   the hosted **Web API** (`api.zotero.org`, API key in `ZOTGO_API_KEY`). Both
   are API-v3, so one semantic client serves both; the endpoints never silently
   fall back to each other, and each is its own version/concurrency domain.
-- **Local writes** use Zotero's official local write contract (item create /
-  patch / delete via `zot item …`), which landed upstream in
+- **Local writes** use Zotero's official local write contract (items, collections,
+  and tags via `zot item / collection / tag …`), which landed upstream in
   `zotero/zotero#5015`. They need a Zotero build that has it (`zot doctor`
   reports the `write` capability); older builds and the **Web profile** stay
   read-only. Writes authorize with a local API key from a Zotero prompt and
