@@ -6,15 +6,28 @@ import (
 	"strings"
 )
 
-// localKeyPath is where zotgo persists an approved local API key. It is a
-// local-only write credential (it authorizes writes to the Zotero on this
-// machine), kept owner-readable only.
-func localKeyPath() (string, error) {
+// configDir is zotgo's configuration directory: $ZOTGO_CONFIG_DIR when set,
+// otherwise the platform user-config dir with a zotgo/ subdirectory.
+func configDir() (string, error) {
+	if d := os.Getenv("ZOTGO_CONFIG_DIR"); d != "" {
+		return d, nil
+	}
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "zotgo", "local-api-key"), nil
+	return filepath.Join(dir, "zotgo"), nil
+}
+
+// localKeyPath is where zotgo persists an approved local API key. It is a
+// local-only write credential (it authorizes writes to the Zotero on this
+// machine), kept owner-readable only.
+func localKeyPath() (string, error) {
+	dir, err := configDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "local-api-key"), nil
 }
 
 // loadLocalKey returns the persisted local API key, or "" if none is stored or

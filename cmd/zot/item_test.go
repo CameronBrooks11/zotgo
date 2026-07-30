@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -48,7 +49,7 @@ func TestSortedIndices(t *testing.T) {
 
 func TestKeystore_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("ZOTGO_CONFIG_DIR", dir)
 
 	if k := loadLocalKey(); k != "" {
 		t.Fatalf("fresh config has a key: %q", k)
@@ -59,14 +60,16 @@ func TestKeystore_RoundTrip(t *testing.T) {
 	if k := loadLocalKey(); k != "SECRET123" {
 		t.Errorf("loadLocalKey = %q, want SECRET123", k)
 	}
-	// Stored owner-only.
-	path := filepath.Join(dir, "zotgo", "local-api-key")
+	// Stored owner-only (Unix permission model only).
+	path := filepath.Join(dir, "local-api-key")
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("key file mode = %o, want 600", perm)
+	if runtime.GOOS != "windows" {
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf("key file mode = %o, want 600", perm)
+		}
 	}
 	if err := clearLocalKey(); err != nil {
 		t.Fatalf("clearLocalKey: %v", err)
