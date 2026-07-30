@@ -185,6 +185,22 @@ func (c *Client) LocalKey() string {
 	return c.localKey
 }
 
+// LibraryVersion returns the library's current clientVersion, read from the
+// Last-Modified-Version header of a cheap list request. This is the value a
+// single-object write passes back as If-Unmodified-Since-Version, so calling it
+// just before a write also primes the Zotero-Server-ID cache.
+func (c *Client) LibraryVersion(ctx context.Context, lib LibraryRef) (int, error) {
+	_, page, err := c.Items(ctx, lib, ItemsOptions{Limit: 1})
+	if err != nil {
+		return 0, err
+	}
+	v, err := strconv.Atoi(page.LastModifiedVersion)
+	if err != nil {
+		return 0, fmt.Errorf("library version %q is not a number: %w", page.LastModifiedVersion, err)
+	}
+	return v, nil
+}
+
 // MaxWriteObjects is the most objects the local write API accepts in one batch
 // (MAX_WRITE_OBJECTS upstream).
 const MaxWriteObjects = 50
