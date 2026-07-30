@@ -81,6 +81,10 @@ paginates, what a field means — belongs in the live suite; call the inference 
   deps, so the command layer stays a thin shell over it. It is an `internal/`
   package, not a published SDK: nothing outside this module can import it.
 - No cgo: builds are `CGO_ENABLED=0` static binaries.
+- Tests must be platform-independent — CI runs macOS and Windows. Do not assume
+  Unix file permissions, or that `os.UserConfigDir` honours `XDG_*` (it does not
+  off Linux). Inject paths (e.g. via an env override) and guard OS-specific
+  assertions with `runtime.GOOS`.
 - **The DTOs in `internal/output` are a contract.** Renaming a field, changing
   its meaning, or removing it is a breaking change and must bump
   `output.SchemaVersion`. Adding a field is not breaking. Zotero's own envelopes
