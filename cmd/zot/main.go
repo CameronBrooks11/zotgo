@@ -1,8 +1,9 @@
 // Command zot is the zotgo CLI: a zero-dependency binary that drives a running
 // Zotero 7+ through its HTTP contracts.
 //
-// Read commands query Zotero's Local API; `zot doctor` checks connectivity.
-// Write commands arrive in later milestones (see working/plan.md).
+// Read commands query the Local API (or the Web API under --web); the item,
+// collection, and tag write commands go through Zotero's local write API on a
+// build that supports it. `zot doctor` reports what the endpoint can do.
 package main
 
 import (

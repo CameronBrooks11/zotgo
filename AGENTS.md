@@ -63,8 +63,8 @@ Zotero's responses independently and compare.
 someone remembers, and an API change rots them silently.
 
 Anything inferred from Zotero's behaviour rather than observed — how a translator
-paginates, what a field means — belongs in the live suite, and the inference
-should be called out in the plan doc until a live run confirms it.
+paginates, what a field means — belongs in the live suite; call the inference out
+(in the PR, the changelog) until a live run confirms it.
 
 ## Conventions
 
@@ -90,19 +90,19 @@ should be called out in the plan doc until a live run confirms it.
 - **Versions are endpoint-scoped; the DTOs carry none.** A Zotero object version
   is only meaningful within the endpoint that issued it, and must never travel to
   another one. The Local API's version is the *server* version, so it does not
-  move on unsynced local edits, and zotero/zotero#5015 will redefine it as a
-  local counter. Do not re-add `version` to a DTO until it has a defined,
-  endpoint-scoped meaning — which is a v0.5 (Web profile) concern, not a v0.3 one.
+  move on unsynced local edits, and `zotero/zotero#5015` (now merged) redefines it
+  as a local `clientVersion`. Do not re-add `version` to a DTO until it has a
+  defined, endpoint-scoped meaning and a consumer that needs it.
 
 ## Layout
 
 ```text
 cmd/zot/          CLI entry point (urfave/cli commands; one file per command)
 internal/
-  zotero/         HTTP client for Zotero's Local API (+ Connector ping)
+  zotero/         HTTP client: Local API, Web API, local writes, Connector ping
   output/         machine-readable contract: versioned DTOs + json/jsonl/raw
   render/         human terminal output: tables and detail views
-working/          local planning docs (gitignored)
+docs/             user + reference documentation
 _reference/       pyzot + zotero upstream, for mining (gitignored)
 ```
 
