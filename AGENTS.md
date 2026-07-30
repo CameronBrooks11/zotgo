@@ -14,11 +14,14 @@ project. Tool-specific files (for example the root `CLAUDE.md`) point here.
   the hosted **Web API** (`api.zotero.org`, API key in `ZOTGO_API_KEY`). Both
   are API-v3, so one semantic client serves both; the endpoints never silently
   fall back to each other, and each is its own version/concurrency domain.
-- **Writes** do not exist yet on either endpoint. The Local API is read-only
-  today; the Web profile is deliberately read-only for now too. zotgo waits
-  for Zotero's official write contract rather than reaching around it. The
-  **Connector API** (`/connector/*`) is reserved for *ingestion* — where Zotero
-  performs an app-level workflow such as PDF recognition or import — and is
+- **Local writes** use Zotero's official local write contract (item create /
+  patch / delete via `zot item …`), which landed upstream in
+  `zotero/zotero#5015`. They need a Zotero build that has it (`zot doctor`
+  reports the `write` capability); older builds and the **Web profile** stay
+  read-only. Writes authorize with a local API key from a Zotero prompt and
+  carry the required `Zotero-Server-ID` and `If-Unmodified-Since-Version`
+  preconditions. The **Connector API** (`/connector/*`) is reserved for
+  *ingestion* — app-level workflows such as PDF recognition or import — and is
   never a general write backend: its save target is whatever library the user
   happens to have selected.
 - `zotero.sqlite` is **never** opened. Talking to the app over its own HTTP

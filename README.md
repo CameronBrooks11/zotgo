@@ -112,6 +112,26 @@ allows it; `zot` still does not write today).
 The local and Web endpoints are separate: `zot` never silently falls back from
 one to the other, and `--web` is always explicit.
 
+### Writing items (local)
+
+`zot item` creates and modifies items on the **local** endpoint. Writes need a
+Zotero build with the local write API (`zotero/zotero#5015`); older builds are
+read-only, and `zot doctor` reports which you have under the `write` capability.
+
+```bash
+zot item template book                     # a blank skeleton to fill in
+zot item template book > b.json && $EDITOR b.json
+zot item create --file b.json              # create (also reads stdin)
+zot item patch KEY < patch.json            # partial update; other fields untouched
+zot item delete KEY1 KEY2                   # destructive; lists what it will remove
+```
+
+Every write **surfaces the target library, shows what it will do, and asks to
+confirm**. `--dry-run` previews without writing (or authorizing); `--yes` skips
+the prompt for scripts. The first write prompts for approval in Zotero; choosing
+"Always Allow" stores a local key in `~/.config/zotgo/` (0600) so later writes
+don't re-prompt. Writes are refused on `--web`.
+
 ## Machine-readable output
 
 Every command speaks three mutually exclusive machine formats.
