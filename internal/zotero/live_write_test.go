@@ -33,8 +33,7 @@ func liveWriteClient(t *testing.T) (*Client, LibraryRef) {
 }
 
 // libraryVersion reads the library's current clientVersion from a list
-// response's Last-Modified-Version header — the value single-object writes must
-// pass back as If-Unmodified-Since-Version.
+// response's Last-Modified-Version header for bulk writes and deletes.
 func libraryVersion(t *testing.T, c *Client, lib LibraryRef) int {
 	t.Helper()
 	_, page, err := c.Items(context.Background(), lib, ItemsOptions{Limit: 1})
@@ -88,8 +87,8 @@ func TestLiveWriteRoundTrip(t *testing.T) {
 		t.Errorf("created title = %q, want the one we sent", got.Title())
 	}
 
-	// Patch, guarded by the library version.
-	if err := c.PatchItem(ctx, lib, created.Key, json.RawMessage(`{"title":"zotgo patched"}`), libraryVersion(t, c, lib)); err != nil {
+	// Patch, guarded by the object's current version.
+	if err := c.PatchItem(ctx, lib, created.Key, json.RawMessage(`{"title":"zotgo patched"}`), got.Version); err != nil {
 		t.Fatalf("PatchItem: %v", err)
 	}
 	got, err = c.Item(ctx, lib, created.Key)
@@ -117,7 +116,8 @@ func TestLiveWriteRoundTrip(t *testing.T) {
 		t.Fatalf("collection create failed: %+v", cres.FirstFailure())
 	}
 	ck := cres.Successful["0"].Key
-	if err := c.PatchCollection(ctx, lib, ck, json.RawMessage(`{"name":"zotgo live renamed"}`), libraryVersion(t, c, lib)); err != nil {
+	createdCollection := cres.Successful["0"]
+	if err := c.PatchCollection(ctx, lib, ck, json.RawMessage(`{"name":"zotgo live renamed"}`), createdCollection.Version); err != nil {
 		t.Fatalf("PatchCollection: %v", err)
 	}
 	col, err := c.Collection(ctx, lib, ck)

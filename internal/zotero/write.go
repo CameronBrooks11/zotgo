@@ -186,9 +186,9 @@ func (c *Client) LocalKey() string {
 }
 
 // LibraryVersion returns the library's current clientVersion, read from the
-// Last-Modified-Version header of a cheap list request. This is the value a
-// single-object write passes back as If-Unmodified-Since-Version, so calling it
-// just before a write also primes the Zotero-Server-ID cache.
+// Last-Modified-Version header of a cheap list request. Bulk writes and deletes
+// use it as If-Unmodified-Since-Version. Single-object PATCH requests must use
+// that object's version instead.
 func (c *Client) LibraryVersion(ctx context.Context, lib LibraryRef) (int, error) {
 	_, page, err := c.Items(ctx, lib, ItemsOptions{Limit: 1})
 	if err != nil {
