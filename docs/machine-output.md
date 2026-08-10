@@ -24,10 +24,26 @@ for every command, so a script learns it once:
 ```
 
 `kind` says what `data` holds: `items`, `item`, `collections`, `collection`,
-`stats`, or `health`. A `health` document carries `endpoint` and `capabilities`,
-so a script can check for `write` support rather than assume it. `schema` is
-bumped only when a field changes meaning or disappears — new fields may appear at
-any time, so ignore the ones you don't know.
+`stats`, `health`, or `item-mutations`. A `health` document carries `endpoint`
+and `capabilities`, so a script can check for `write` support rather than assume
+it. `schema` is bumped only when a field changes meaning or disappears — new
+fields may appear at any time, so ignore the ones you don't know.
+
+### Item writes
+
+`zot item create`, `patch`, and `delete` emit an `item-mutations` document whose
+`data` is always an array, including a single create or patch. Every record has
+the request `index`, its `operation`, and a status such as `planned`, `created`,
+`unchanged`, `failed`, `patched`, `deleted`, or `notFound`. Context fields (`key`,
+`type`, `title`, and sorted patch `fields`) appear when known; failed creates
+carry a structured `failure` with `code` and `message`. Dry runs use `planned`
+and perform no authorization or write.
+
+Non-dry-run item writes require `--yes` with `--json` or `--jsonl`. This prevents
+an automation command from falling back to an interactive prompt. A partial
+create emits all per-item outcomes in request order, then exits with status 1.
+Mutation documents have no pagination `meta` and never expose Zotero object
+versions or the raw request body.
 
 ### No `version` field
 
@@ -43,7 +59,8 @@ explicitly outside this contract.
 
 `--jsonl` emits one document per line, each repeating `schema`, `kind`, and
 `library`. Every line therefore stands alone, and a stream survives being
-truncated, split, or concatenated with another:
+truncated, split, or concatenated with another. Item write records use the
+singular kind `item-mutation`:
 
 ```sh
 zot --jsonl list | jq -r '.data | "\(.key)\t\(.title)"'
@@ -53,5 +70,6 @@ zot --jsonl list | jq -r '.data | "\(.key)\t\(.title)"'
 
 `--raw` passes Zotero's API response straight through. It is an escape hatch for
 fields zotgo does not model, and it is **not covered by `schema`**: its shape is
-Zotero's and changes when Zotero changes. `stats` and `doctor` reject `--raw`,
-because zotgo derives them and there is no underlying Zotero response.
+Zotero's and changes when Zotero changes. `stats`, `doctor`, and the three item
+write commands reject `--raw`, because their output is derived and is not a raw
+Zotero response.

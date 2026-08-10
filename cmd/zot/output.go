@@ -53,3 +53,19 @@ func emitOne[T any](w io.Writer, mode output.Mode, kind output.Kind, lib *output
 		return fmt.Errorf("emitOne called in %s mode", mode)
 	}
 }
+
+// emitItemMutations writes item write results without attaching list pagination
+// metadata. JSON always carries the complete request as an array; JSONL carries
+// one self-describing document per request record.
+func emitItemMutations(w io.Writer, mode output.Mode, lib *output.Library, records []output.ItemMutation) error {
+	switch mode {
+	case output.ModeJSON:
+		return output.WriteJSON(w, output.NewDocument(output.KindItemMutations, lib, records))
+	case output.ModeJSONL:
+		return output.WriteJSONL(w, output.KindItemMutation, lib, records)
+	case output.ModeRaw:
+		return output.ErrRawUnavailable
+	default:
+		return fmt.Errorf("emitItemMutations called in %s mode", mode)
+	}
+}

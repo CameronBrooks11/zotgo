@@ -15,6 +15,7 @@ import (
 
 	"github.com/urfave/cli/v3"
 
+	"github.com/CameronBrooks11/zotgo/internal/output"
 	"github.com/CameronBrooks11/zotgo/internal/zotero"
 )
 
@@ -45,6 +46,10 @@ func itemCreateCommand() *cli.Command {
 }
 
 func itemCreateAction(ctx context.Context, cmd *cli.Command) error {
+	mode, err := itemMutationMode(cmd)
+	if err != nil {
+		return err
+	}
 	if cmd.Bool("web") {
 		return errors.New("writes are local-only; the --web profile is read-only")
 	}
@@ -75,15 +80,20 @@ func itemCreateAction(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	w := out(cmd)
-	fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
-	printItemSummary(w, items)
+	if mode == output.ModeHuman {
+		fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
+		printItemSummary(w, items)
+	}
 
 	if cmd.Bool("dry-run") {
+		if mode != output.ModeHuman {
+			return emitItemMutations(w, mode, output.NewLibrary(lib), plannedItemCreates(items))
+		}
 		fmt.Fprintln(w, "\nDry run — nothing was written.")
 		return nil
 	}
 
-	if !cmd.Bool("yes") {
+	if mode == output.ModeHuman && !cmd.Bool("yes") {
 		if fromStdin {
 			return errors.New("item JSON was read from stdin, so I cannot prompt — re-run with --yes (or --dry-run), or use --file")
 		}
@@ -101,7 +111,17 @@ func itemCreateAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return writeFriendly(err)
 	}
-	reportWriteResult(w, res)
+	if mode != output.ModeHuman {
+		records, resultErr := itemCreateResults(items, res)
+		if err := emitItemMutations(w, mode, output.NewLibrary(lib), records); err != nil {
+			return err
+		}
+		if resultErr != nil {
+			return resultErr
+		}
+	} else {
+		reportWriteResult(w, res)
+	}
 	if !res.Ok() {
 		return cli.Exit("", 1)
 	}
@@ -147,6 +167,106 @@ func printItemSummary(w io.Writer, items []json.RawMessage) {
 		_ = json.Unmarshal(it, &m)
 		fmt.Fprintf(w, "  + %s: %s\n", orDash(m.ItemType), orDash(m.Title))
 	}
+}
+
+func itemMutationMode(cmd *cli.Command) (output.Mode, error) {
+	mode, err := outputMode(cmd)
+	if err != nil {
+		return mode, err
+	}
+	if mode == output.ModeRaw {
+		return mode, output.ErrRawUnavailable
+	}
+	if mode != output.ModeHuman && !cmd.Bool("dry-run") && !cmd.Bool("yes") {
+		return mode, fmt.Errorf("%s item writes require --yes (or --dry-run)", mode)
+	}
+	return mode, nil
+}
+
+func plannedItemCreates(items []json.RawMessage) []output.ItemMutation {
+	records := make([]output.ItemMutation, 0, len(items))
+	for i, item := range items {
+		records = append(records, itemCreateContext(i, item))
+	}
+	return records
+}
+
+func itemCreateContext(index int, item json.RawMessage) output.ItemMutation {
+	var context struct {
+		Type  string `json:"itemType"`
+		Title string `json:"title"`
+	}
+	_ = json.Unmarshal(item, &context)
+	return output.ItemMutation{
+		Index:     index,
+		Operation: "create",
+		Status:    "planned",
+		Type:      context.Type,
+		Title:     context.Title,
+	}
+}
+
+func itemCreateResults(items []json.RawMessage, res zotero.WriteResult) ([]output.ItemMutation, error) {
+	var problems []string
+	problems = append(problems, invalidWriteResultIndices("successful", res.Successful, len(items))...)
+	problems = append(problems, invalidWriteResultIndices("unchanged", res.Unchanged, len(items))...)
+	problems = append(problems, invalidWriteResultIndices("failed", res.Failed, len(items))...)
+
+	records := make([]output.ItemMutation, 0, len(items))
+	for index, raw := range items {
+		indexText := strconv.Itoa(index)
+		record := itemCreateContext(index, raw)
+		outcomes := 0
+		if created, ok := res.Successful[indexText]; ok {
+			outcomes++
+			item := output.NewItem(created)
+			record.Status = "created"
+			record.Key = item.Key
+			if item.Type != "" {
+				record.Type = item.Type
+			}
+			if item.Title != "" {
+				record.Title = item.Title
+			}
+		}
+		if key, ok := res.Unchanged[indexText]; ok {
+			outcomes++
+			record.Status = "unchanged"
+			record.Key = key
+		}
+		if failure, ok := res.Failed[indexText]; ok {
+			outcomes++
+			record.Status = "failed"
+			record.Key = failure.Key
+			record.Failure = &output.ItemMutationError{Code: failure.Code, Message: failure.Message}
+		}
+		if outcomes != 1 {
+			message := "Zotero returned no outcome for this request"
+			if outcomes > 1 {
+				message = "Zotero returned multiple outcomes for this request"
+			}
+			record.Status = "failed"
+			record.Key = ""
+			record.Failure = &output.ItemMutationError{Message: message}
+			problems = append(problems, fmt.Sprintf("request index %d has %d outcomes", index, outcomes))
+		}
+		records = append(records, record)
+	}
+	if len(problems) != 0 {
+		return records, fmt.Errorf("invalid Zotero write response: %s", strings.Join(problems, "; "))
+	}
+	return records, nil
+}
+
+func invalidWriteResultIndices[T any](category string, entries map[string]T, requestCount int) []string {
+	var problems []string
+	for indexText := range entries {
+		index, err := strconv.Atoi(indexText)
+		if err != nil || index < 0 || index >= requestCount {
+			problems = append(problems, fmt.Sprintf("%s index %q is outside the request", category, indexText))
+		}
+	}
+	return problems
 }
 
 func reportWriteResult(w io.Writer, res zotero.WriteResult) {
@@ -275,6 +395,10 @@ func itemPatchCommand() *cli.Command {
 }
 
 func itemPatchAction(ctx context.Context, cmd *cli.Command) error {
+	mode, err := itemMutationMode(cmd)
+	if err != nil {
+		return err
+	}
 	if cmd.Bool("web") {
 		return errors.New("writes are local-only; the --web profile is read-only")
 	}
@@ -310,15 +434,30 @@ func itemPatchAction(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	w := out(cmd)
-	fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
-	fmt.Fprintf(w, "Patching %s (%s): %s\n", key, item.ItemType(), orDash(item.Title()))
-	fmt.Fprintf(w, "  fields: %s\n", strings.Join(patchFields(patch), ", "))
+	fields := patchFields(patch)
+	record := output.ItemMutation{
+		Index:     0,
+		Operation: "patch",
+		Status:    "planned",
+		Key:       key,
+		Type:      item.ItemType(),
+		Title:     item.Title(),
+		Fields:    fields,
+	}
+	if mode == output.ModeHuman {
+		fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
+		fmt.Fprintf(w, "Patching %s (%s): %s\n", key, item.ItemType(), orDash(item.Title()))
+		fmt.Fprintf(w, "  fields: %s\n", strings.Join(fields, ", "))
+	}
 
 	if cmd.Bool("dry-run") {
+		if mode != output.ModeHuman {
+			return emitItemMutations(w, mode, output.NewLibrary(lib), []output.ItemMutation{record})
+		}
 		fmt.Fprintln(w, "\nDry run — nothing was written.")
 		return nil
 	}
-	if !cmd.Bool("yes") {
+	if mode == output.ModeHuman && !cmd.Bool("yes") {
 		if fromStdin {
 			return errors.New("the patch was read from stdin, so I cannot prompt — re-run with --yes (or --dry-run), or use --file")
 		}
@@ -338,6 +477,10 @@ func itemPatchAction(ctx context.Context, cmd *cli.Command) error {
 	if err := c.PatchItem(ctx, lib, key, patch, version); err != nil {
 		return writeFriendly(err)
 	}
+	if mode != output.ModeHuman {
+		record.Status = "patched"
+		return emitItemMutations(w, mode, output.NewLibrary(lib), []output.ItemMutation{record})
+	}
 	fmt.Fprintf(w, "patched %s\n", key)
 	return nil
 }
@@ -356,6 +499,10 @@ func itemDeleteCommand() *cli.Command {
 }
 
 func itemDeleteAction(ctx context.Context, cmd *cli.Command) error {
+	mode, err := itemMutationMode(cmd)
+	if err != nil {
+		return err
+	}
 	if cmd.Bool("web") {
 		return errors.New("writes are local-only; the --web profile is read-only")
 	}
@@ -376,31 +523,53 @@ func itemDeleteAction(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	w := out(cmd)
-	fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
-	fmt.Fprintln(w, "Will delete:")
-	var found []string
-	for _, key := range keys {
+	if mode == output.ModeHuman {
+		fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
+		fmt.Fprintln(w, "Will delete:")
+	}
+	found := make([]string, 0, len(keys))
+	records := make([]output.ItemMutation, 0, len(keys))
+	for index, key := range keys {
 		item, err := c.Item(ctx, lib, key)
 		if errors.Is(err, zotero.ErrNotFound) {
-			fmt.Fprintf(w, "  ! %s — not found, skipping\n", key)
+			records = append(records, output.ItemMutation{Index: index, Operation: "delete", Status: "notFound", Key: key})
+			if mode == output.ModeHuman {
+				fmt.Fprintf(w, "  ! %s — not found, skipping\n", key)
+			}
 			continue
 		}
 		if err != nil {
 			return friendly(err)
 		}
 		found = append(found, key)
-		fmt.Fprintf(w, "  - %s (%s): %s\n", key, item.ItemType(), orDash(item.Title()))
+		records = append(records, output.ItemMutation{
+			Index:     index,
+			Operation: "delete",
+			Status:    "planned",
+			Key:       key,
+			Type:      item.ItemType(),
+			Title:     item.Title(),
+		})
+		if mode == output.ModeHuman {
+			fmt.Fprintf(w, "  - %s (%s): %s\n", key, item.ItemType(), orDash(item.Title()))
+		}
 	}
 	if len(found) == 0 {
+		if mode != output.ModeHuman {
+			return emitItemMutations(w, mode, output.NewLibrary(lib), records)
+		}
 		fmt.Fprintln(w, "Nothing to delete.")
 		return nil
 	}
 
 	if cmd.Bool("dry-run") {
+		if mode != output.ModeHuman {
+			return emitItemMutations(w, mode, output.NewLibrary(lib), records)
+		}
 		fmt.Fprintln(w, "\nDry run — nothing was deleted.")
 		return nil
 	}
-	if !cmd.Bool("yes") {
+	if mode == output.ModeHuman && !cmd.Bool("yes") {
 		if !confirm(os.Stdin, w, fmt.Sprintf("Delete %d item(s)? This cannot be undone.", len(found))) {
 			fmt.Fprintln(w, "Aborted.")
 			return nil
@@ -416,6 +585,14 @@ func itemDeleteAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	if err := c.DeleteItems(ctx, lib, found, version); err != nil {
 		return writeFriendly(err)
+	}
+	if mode != output.ModeHuman {
+		for i := range records {
+			if records[i].Status == "planned" {
+				records[i].Status = "deleted"
+			}
+		}
+		return emitItemMutations(w, mode, output.NewLibrary(lib), records)
 	}
 	fmt.Fprintf(w, "deleted %d item(s)\n", len(found))
 	return nil

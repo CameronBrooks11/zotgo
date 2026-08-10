@@ -54,6 +54,26 @@ type Item struct {
 	Children []Item `json:"children,omitempty"`
 }
 
+// ItemMutation is the outcome, or dry-run plan, for one item write request.
+// Index always refers to the caller's request order. Fields names the fields
+// changed by a patch, without exposing the patch values themselves.
+type ItemMutation struct {
+	Index     int                `json:"index"`
+	Operation string             `json:"operation"`
+	Status    string             `json:"status"`
+	Key       string             `json:"key,omitempty"`
+	Type      string             `json:"type,omitempty"`
+	Title     string             `json:"title,omitempty"`
+	Fields    []string           `json:"fields,omitempty"`
+	Failure   *ItemMutationError `json:"failure,omitempty"`
+}
+
+// ItemMutationError is a structured rejection returned for a failed create.
+type ItemMutationError struct {
+	Code    int    `json:"code,omitempty"`
+	Message string `json:"message"`
+}
+
 // Creator is one author, editor, or other contributor.
 //
 // Zotero stores a creator either as a first/last pair or as a single
