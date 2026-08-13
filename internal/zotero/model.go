@@ -5,6 +5,23 @@ import (
 	"strconv"
 )
 
+// versionNumber accepts the empty version emitted for untouched objects
+// migrated by affected Zotero 10 beta builds, while rejecting other strings.
+type versionNumber int
+
+func (v *versionNumber) UnmarshalJSON(data []byte) error {
+	if string(data) == `""` {
+		*v = 0
+		return nil
+	}
+	var number int
+	if err := json.Unmarshal(data, &number); err != nil {
+		return err
+	}
+	*v = versionNumber(number)
+	return nil
+}
+
 // Envelope is the common Local API wrapper for items and collections.
 //
 // Data is intentionally raw: Zotero item fields vary by itemType, and preserving
@@ -16,6 +33,19 @@ type Envelope struct {
 	Links   map[string]Link            `json:"links"`
 	Meta    map[string]json.RawMessage `json:"meta"`
 	Data    json.RawMessage            `json:"data"`
+}
+
+func (e *Envelope) UnmarshalJSON(data []byte) error {
+	type envelope Envelope
+	decoded := struct {
+		Version versionNumber `json:"version"`
+		*envelope
+	}{envelope: (*envelope)(e)}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	e.Version = int(decoded.Version)
+	return nil
 }
 
 // Library identifies the library that owns an envelope.
@@ -44,6 +74,19 @@ type ItemData struct {
 	Creators    []Creator `json:"creators"`
 	Tags        []Tag     `json:"tags"`
 	Collections []string  `json:"collections"`
+}
+
+func (d *ItemData) UnmarshalJSON(data []byte) error {
+	type itemData ItemData
+	decoded := struct {
+		Version versionNumber `json:"version"`
+		*itemData
+	}{itemData: (*itemData)(d)}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	d.Version = int(decoded.Version)
+	return nil
 }
 
 type Creator struct {
