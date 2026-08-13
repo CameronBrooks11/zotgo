@@ -36,7 +36,9 @@ script-friendly output with `--json` / `--jsonl` / `--raw`.
 
 ## Documentation
 
-Full docs live in **[`docs/`](docs/README.md)**:
+The docs are published as a site at
+**<https://cameronbrooks11.github.io/zotgo/>**, and the source lives in
+**[`docs/`](docs/README.md)**:
 
 - [Getting started](docs/getting-started.md) · [Reading](docs/reading.md) ·
   [Writing](docs/writing.md) · [Endpoints & profiles](docs/profiles.md) ·

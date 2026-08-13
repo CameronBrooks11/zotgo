@@ -1,0 +1,12 @@
+[book]
+title = "zotgo"
+description = "Drive a running Zotero 7+ from the command line — read, search, export, and edit your library over Zotero's own HTTP contracts."
+authors = ["Cameron Brooks"]
+src = "docs"
+language = "en"
+
+[output.html]
+git-repository-url = "https://github.com/CameronBrooks11/zotgo"
+edit-url-template = "https://github.com/CameronBrooks11/zotgo/edit/main/{path}"
+default-theme = "rust"
+preferred-dark-theme = "ayu"

@@ -16,5 +16,5 @@ changes are in the [changelog][changelog]. Contribution conventions are in
 [`AGENTS.md`][agents].
 
 [issues]: https://github.com/CameronBrooks11/zotgo/issues
-[changelog]: ../CHANGELOG.md
-[agents]: ../AGENTS.md
+[changelog]: https://github.com/CameronBrooks11/zotgo/blob/main/CHANGELOG.md
+[agents]: https://github.com/CameronBrooks11/zotgo/blob/main/AGENTS.md
