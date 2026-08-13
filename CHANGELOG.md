@@ -10,6 +10,12 @@ Planned and outstanding work is tracked in the
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-13
+
+A symmetric machine-readable contract across every write, streaming reads for
+large libraries, two more local write operations, and a hosted documentation
+site.
+
 ### Added
 
 - `zot item replace KEY` — overwrite an item with a complete JSON object (PUT).
@@ -24,6 +30,8 @@ Planned and outstanding work is tracked in the
   `--json`/`--jsonl` records, dry-run `planned` outcomes, `--yes` required for
   non-dry-run machine writes, and `--raw` refused). Completes the machine-output
   parity started in #30.
+- Hosted documentation site at <https://cameronbrooks11.github.io/zotgo/>, built
+  from `docs/` with mdBook and deployed to GitHub Pages on every push to `main`.
 
 ### Changed
 
@@ -135,7 +143,8 @@ contract before scripts could depend on it.
   `collections`, `stats`. Zero-dependency static binary and a goreleaser release
   pipeline.
 
-[Unreleased]: https://github.com/CameronBrooks11/zotgo/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/CameronBrooks11/zotgo/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.3.0...v0.5.0
