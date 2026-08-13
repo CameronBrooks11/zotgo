@@ -379,6 +379,56 @@ func TestListJSONL(t *testing.T) {
 	}
 }
 
+// With --limit 0, --jsonl streams every page as it arrives rather than
+// buffering the whole library, but the output must still be every item, in
+// order, one self-describing document per line.
+func TestListJSONLStreamsAllPages(t *testing.T) {
+	var srv *httptest.Server
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /connector/ping", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Zotero-Version", "9.9.9")
+		_, _ = w.Write([]byte("Zotero is running"))
+	})
+	mux.HandleFunc("GET /api/users/0/items/top", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Total-Results", "2")
+		switch r.URL.Query().Get("start") {
+		case "":
+			w.Header().Set("Link", "<"+srv.URL+"/api/users/0/items/top?start=1>; rel=\"next\"")
+			_, _ = w.Write([]byte(`[{"key":"AAAA1111","data":{"key":"AAAA1111","itemType":"book","title":"One"}}]`))
+		case "1":
+			_, _ = w.Write([]byte(`[{"key":"BBBB2222","data":{"key":"BBBB2222","itemType":"book","title":"Two"}}]`))
+		default:
+			t.Fatalf("unexpected start = %q", r.URL.Query().Get("start"))
+		}
+	})
+	srv = httptest.NewServer(mux)
+	defer srv.Close()
+
+	out, _, err := runCLI(srv.URL, "--jsonl", "list", "--limit", "0")
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("got %d lines, want 2 (both pages):\n%s", len(lines), out)
+	}
+	wantKeys := []string{"AAAA1111", "BBBB2222"}
+	for i, line := range lines {
+		var doc struct {
+			Kind string `json:"kind"`
+			Data struct {
+				Key string `json:"key"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal([]byte(line), &doc); err != nil {
+			t.Fatalf("line %d not valid JSON: %v\n%s", i, err, line)
+		}
+		if doc.Kind != "item" || doc.Data.Key != wantKeys[i] {
+			t.Errorf("line %d = %+v, want key %s", i, doc, wantKeys[i])
+		}
+	}
+}
+
 func TestOutputModesAreMutuallyExclusive(t *testing.T) {
 	srv := fakeZotero(true)
 	defer srv.Close()

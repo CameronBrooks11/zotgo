@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -102,6 +103,76 @@ func TestAllItems_FollowsNextLink(t *testing.T) {
 	}
 	if items[0].Key != "AAAA1111" || items[1].Key != "BBBB2222" {
 		t.Fatalf("unexpected keys: %+v", items)
+	}
+}
+
+func TestIterItems_YieldsEachPageInOrder(t *testing.T) {
+	var srv *httptest.Server
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/users/0/items", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Total-Results", "2")
+		switch r.URL.Query().Get("start") {
+		case "":
+			w.Header().Set("Link", "<"+srv.URL+"/api/users/0/items?limit=1&start=1>; rel=\"next\"")
+			_, _ = w.Write([]byte(`[{"key":"AAAA1111","data":{"itemType":"book","title":"One"}}]`))
+		case "1":
+			_, _ = w.Write([]byte(`[{"key":"BBBB2222","data":{"itemType":"book","title":"Two"}}]`))
+		default:
+			t.Fatalf("unexpected start = %q", r.URL.Query().Get("start"))
+		}
+	})
+	srv = httptest.NewServer(mux)
+	defer srv.Close()
+
+	var pages [][]string
+	err := New(srv.URL).IterItems(context.Background(), UserLibrary(), ItemsOptions{Limit: 1}, func(items []Envelope) error {
+		keys := make([]string, len(items))
+		for i, e := range items {
+			keys[i] = e.Key
+		}
+		pages = append(pages, keys)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("IterItems returned error: %v", err)
+	}
+	if len(pages) != 2 || pages[0][0] != "AAAA1111" || pages[1][0] != "BBBB2222" {
+		t.Fatalf("pages = %+v, want [[AAAA1111] [BBBB2222]]", pages)
+	}
+}
+
+func TestIterItems_StopsOnYieldError(t *testing.T) {
+	var srv *httptest.Server
+	var secondPage atomic.Bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/users/0/items", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Total-Results", "2")
+		switch r.URL.Query().Get("start") {
+		case "":
+			w.Header().Set("Link", "<"+srv.URL+"/api/users/0/items?limit=1&start=1>; rel=\"next\"")
+			_, _ = w.Write([]byte(`[{"key":"AAAA1111","data":{"itemType":"book","title":"One"}}]`))
+		case "1":
+			secondPage.Store(true)
+			_, _ = w.Write([]byte(`[{"key":"BBBB2222"}]`))
+		}
+	})
+	srv = httptest.NewServer(mux)
+	defer srv.Close()
+
+	stop := errors.New("stop")
+	calls := 0
+	err := New(srv.URL).IterItems(context.Background(), UserLibrary(), ItemsOptions{Limit: 1}, func(items []Envelope) error {
+		calls++
+		return stop
+	})
+	if !errors.Is(err, stop) {
+		t.Fatalf("err = %v, want the yield error unchanged", err)
+	}
+	if calls != 1 {
+		t.Fatalf("yield called %d times, want 1 (stopped after first page)", calls)
+	}
+	if secondPage.Load() {
+		t.Fatal("fetched the next page after yield asked to stop")
 	}
 }
 

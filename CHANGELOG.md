@@ -19,6 +19,12 @@ Planned and outstanding work is tracked in the
   non-dry-run machine writes, and `--raw` refused). Completes the machine-output
   parity started in #30.
 
+### Changed
+
+- `list` and `search` with `--limit 0 --jsonl` now stream results page by page
+  instead of buffering the whole library before writing, so a very large library
+  is no longer held in memory all at once. The output is unchanged.
+
 ## [0.7.0] - 2026-08-12
 
 Machine-readable item writes plus two local-write correctness fixes — the

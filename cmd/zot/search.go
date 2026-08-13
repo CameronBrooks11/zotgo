@@ -37,11 +37,7 @@ func searchCommand() *cli.Command {
 				Limit:      cmd.Int("limit"),
 			}
 			if opts.Limit == 0 {
-				items, err := c.AllItems(ctx, lib, opts)
-				if err != nil {
-					return friendly(err)
-				}
-				return emitItems(cmd, lib, items, len(items), len(items))
+				return emitItemsAll(ctx, cmd, c, lib, opts)
 			}
 			items, page, err := c.Items(ctx, lib, opts)
 			if err != nil {
