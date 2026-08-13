@@ -22,6 +22,7 @@ func collectionCommand() *cli.Command {
 		Commands: []*cli.Command{
 			collectionCreateCommand(),
 			collectionRenameCommand(),
+			collectionMoveCommand(),
 			collectionDeleteCommand(),
 		},
 	}
@@ -280,6 +281,103 @@ func collectionRenameAction(ctx context.Context, cmd *cli.Command) error {
 		return emitCollectionMutations(w, mode, output.NewLibrary(lib), []output.CollectionMutation{record})
 	}
 	fmt.Fprintf(w, "renamed %s\n", key)
+	return nil
+}
+
+func collectionMoveCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "move",
+		Usage:     "move a collection under a new parent, or to the top level",
+		ArgsUsage: "<key>",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "to", Usage: "new parent collection key"},
+			&cli.BoolFlag{Name: "to-top", Usage: "move to the top level (no parent)"},
+			&cli.BoolFlag{Name: "dry-run", Usage: "show what would change without writing"},
+			&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "skip the confirmation prompt"},
+		},
+		Action: collectionMoveAction,
+	}
+}
+
+func collectionMoveAction(ctx context.Context, cmd *cli.Command) error {
+	mode, err := machineWriteMode(cmd, "collection")
+	if err != nil {
+		return err
+	}
+	if cmd.Bool("web") {
+		return errors.New("writes are local-only; the --web profile is read-only")
+	}
+	key := cmd.Args().First()
+	if key == "" {
+		return errors.New("missing collection key (usage: zot collection move <key> --to <parent> | --to-top)")
+	}
+	to := cmd.String("to")
+	toTop := cmd.Bool("to-top")
+	switch {
+	case to == "" && !toTop:
+		return errors.New("specify a destination: --to <parent-key> or --to-top")
+	case to != "" && toTop:
+		return errors.New("--to and --to-top are mutually exclusive")
+	}
+
+	c, lib, err := resolveLibrary(ctx, cmd)
+	if err != nil {
+		return err
+	}
+	if k := loadLocalKey(); k != "" {
+		c.SetLocalKey(k)
+	}
+
+	col, err := c.Collection(ctx, lib, key)
+	if err != nil {
+		if errors.Is(err, zotero.ErrNotFound) {
+			return fmt.Errorf("no collection with key %q in %s", key, lib.Name)
+		}
+		return friendly(err)
+	}
+	data, _ := col.CollectionData()
+
+	var parentValue any = false
+	dest := "the top level"
+	if to != "" {
+		parentValue = to
+		dest = to
+	}
+
+	record := output.CollectionMutation{Index: 0, Operation: "move", Status: "planned", Key: key, Name: data.Name, ParentKey: to}
+	w := out(cmd)
+	if mode == output.ModeHuman {
+		fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
+		fmt.Fprintf(w, "Move %s (%s) → %s\n", key, orDash(data.Name), dest)
+	}
+
+	if cmd.Bool("dry-run") {
+		if mode != output.ModeHuman {
+			return emitCollectionMutations(w, mode, output.NewLibrary(lib), []output.CollectionMutation{record})
+		}
+		fmt.Fprintln(w, "\nDry run — nothing was written.")
+		return nil
+	}
+	if mode == output.ModeHuman && !cmd.Bool("yes") && !confirm(os.Stdin, w, fmt.Sprintf("Move %s?", key)) {
+		fmt.Fprintln(w, "Aborted.")
+		return nil
+	}
+
+	if err := ensureLocalKey(ctx, c); err != nil {
+		return err
+	}
+	patch, err := json.Marshal(map[string]any{"parentCollection": parentValue})
+	if err != nil {
+		return err
+	}
+	if err := c.PatchCollection(ctx, lib, key, patch, col.Version); err != nil {
+		return writeFriendly(err)
+	}
+	if mode != output.ModeHuman {
+		record.Status = "moved"
+		return emitCollectionMutations(w, mode, output.NewLibrary(lib), []output.CollectionMutation{record})
+	}
+	fmt.Fprintf(w, "moved %s\n", key)
 	return nil
 }
 

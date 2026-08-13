@@ -41,15 +41,15 @@ outcome before the command exits with status 1. Mutation documents have no
 pagination `meta` and never expose Zotero object versions or the raw request
 body.
 
-- **Items** — `zot item create`, `patch`, `delete` → `item-mutations`. Statuses:
-  `planned`, `created`, `unchanged`, `patched`, `deleted`, `notFound`, `failed`.
-  Context fields `key`, `type`, `title`, and sorted patch `fields` appear when
-  known; a failed create carries a structured `failure` with `code` and
-  `message`.
-- **Collections** — `zot collection create`, `rename`, `delete` →
-  `collection-mutations`. Statuses: `planned`, `created`, `renamed`, `deleted`,
-  `notFound`, `unchanged`, `failed`. Records carry `key`, `name`, and `parentKey`
-  when known.
+- **Items** — `zot item create`, `patch`, `replace`, `delete` →
+  `item-mutations`. Statuses: `planned`, `created`, `unchanged`, `patched`,
+  `replaced`, `deleted`, `notFound`, `failed`. Context fields `key`, `type`,
+  `title`, and sorted patch `fields` appear when known; a failed create carries a
+  structured `failure` with `code` and `message`.
+- **Collections** — `zot collection create`, `rename`, `move`, `delete` →
+  `collection-mutations`. Statuses: `planned`, `created`, `renamed`, `moved`,
+  `deleted`, `notFound`, `unchanged`, `failed`. Records carry `key`, `name`, and
+  `parentKey` when known.
 - **Tags** — `zot tag add`, `remove`, `delete` → `tag-mutations`. Each requested
   tag is one record with its `tag` name; `add`/`remove` also carry the target
   `item`, while the library-wide `delete` omits it. Statuses: `planned`, `added`,

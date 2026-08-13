@@ -12,6 +12,12 @@ Planned and outstanding work is tracked in the
 
 ### Added
 
+- `zot item replace KEY` — overwrite an item with a complete JSON object (PUT).
+  Fields you omit are reset to their defaults (except `tags`, which Zotero
+  preserves unless you send `"tags": []`), so it complements `patch`. Same safety
+  rails and machine output as the other writes (`replaced` status).
+- `zot collection move KEY --to PARENT` (or `--to-top`) — reparent a collection,
+  with machine output (`moved` status).
 - Machine-readable output for collection and tag writes: `collection create`,
   `rename`, `delete` emit `collection-mutations`, and `tag add`, `remove`,
   `delete` emit `tag-mutations`, matching the item write contract (stable

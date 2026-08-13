@@ -209,6 +209,49 @@ func TestCollectionRenameMachine(t *testing.T) {
 	}
 }
 
+func TestCollectionMoveMachine(t *testing.T) {
+	fake := &collectionWriteFake{}
+	srv := newCollectionWriteFake(t, fake)
+	defer srv.Close()
+
+	// Dry run under a new parent: planned, parentKey set, no write.
+	got, _, err := runCLI(srv.URL, "--json", "collection", "move", "COLL0001", "--to", "PARENT99", "--dry-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := decodeCollectionMutationDocument(t, got)
+	if len(doc.Data) != 1 || doc.Data[0].Operation != "move" || doc.Data[0].Status != "planned" || doc.Data[0].ParentKey != "PARENT99" {
+		t.Fatalf("dry-run record = %+v", doc.Data)
+	}
+	if fake.patches.Load() != 0 {
+		t.Fatal("dry run performed a write")
+	}
+
+	// Real move to top level: one patch, status moved, no parentKey.
+	storeItemWriteKey(t)
+	got, _, err = runCLI(srv.URL, "--json", "collection", "move", "COLL0001", "--to-top", "--yes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc = decodeCollectionMutationDocument(t, got)
+	if len(doc.Data) != 1 || doc.Data[0].Status != "moved" || doc.Data[0].ParentKey != "" || fake.patches.Load() != 1 {
+		t.Fatalf("record = %+v, patches = %d", doc.Data, fake.patches.Load())
+	}
+}
+
+func TestCollectionMoveRejectsBadDestination(t *testing.T) {
+	// No server should be reached: destination is validated before any request.
+	for name, args := range map[string][]string{
+		"neither": {"collection", "move", "COLL0001", "--yes"},
+		"both":    {"collection", "move", "COLL0001", "--to", "P1", "--to-top", "--yes"},
+	} {
+		_, _, err := runCLI("http://must-not-be-used.invalid", args...)
+		if err == nil {
+			t.Errorf("%s: expected a destination error", name)
+		}
+	}
+}
+
 func TestCollectionDeleteMachineNotFoundOrdering(t *testing.T) {
 	fake := &collectionWriteFake{}
 	srv := newCollectionWriteFake(t, fake)

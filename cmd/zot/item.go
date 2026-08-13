@@ -26,6 +26,7 @@ func itemCommand() *cli.Command {
 		Commands: []*cli.Command{
 			itemCreateCommand(),
 			itemPatchCommand(),
+			itemReplaceCommand(),
 			itemDeleteCommand(),
 			itemTemplateCommand(),
 		},
@@ -469,6 +470,147 @@ func itemPatchAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	fmt.Fprintf(w, "patched %s\n", key)
 	return nil
+}
+
+func itemReplaceCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "replace",
+		Usage:     "overwrite one item with a complete JSON object (fields you omit are reset)",
+		ArgsUsage: "<item-key>",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "file", Aliases: []string{"f"}, Usage: "read the full item JSON from this file instead of stdin"},
+			&cli.BoolFlag{Name: "dry-run", Usage: "show what would change without writing"},
+			&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "skip the confirmation prompt"},
+		},
+		Action: itemReplaceAction,
+	}
+}
+
+func itemReplaceAction(ctx context.Context, cmd *cli.Command) error {
+	mode, err := itemMutationMode(cmd)
+	if err != nil {
+		return err
+	}
+	if cmd.Bool("web") {
+		return errors.New("writes are local-only; the --web profile is read-only")
+	}
+	key := cmd.Args().First()
+	if key == "" {
+		return errors.New("missing item key (usage: zot item replace <item-key>)")
+	}
+	file := cmd.String("file")
+	fromStdin := file == ""
+	raw, err := readItemInput(file)
+	if err != nil {
+		return err
+	}
+	full, err := parseReplaceInput(raw)
+	if err != nil {
+		return err
+	}
+
+	c, lib, err := resolveLibrary(ctx, cmd)
+	if err != nil {
+		return err
+	}
+	if k := loadLocalKey(); k != "" {
+		c.SetLocalKey(k)
+	}
+
+	item, err := c.Item(ctx, lib, key)
+	if err != nil {
+		if errors.Is(err, zotero.ErrNotFound) {
+			return fmt.Errorf("no item with key %q in %s", key, lib.Name)
+		}
+		return friendly(err)
+	}
+
+	// Describe the item with the incoming object's type/title where present,
+	// falling back to the existing values so the record is never blank.
+	newType, newTitle := replaceContext(full)
+	record := output.ItemMutation{
+		Index:     0,
+		Operation: "replace",
+		Status:    "planned",
+		Key:       key,
+		Type:      orField(newType, item.ItemType()),
+		Title:     orField(newTitle, item.Title()),
+	}
+	w := out(cmd)
+	if mode == output.ModeHuman {
+		fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
+		fmt.Fprintf(w, "Replacing %s (%s): %s\n", key, item.ItemType(), orDash(item.Title()))
+		fmt.Fprintln(w, "  full replace — omitted fields are reset to their defaults (except tags: send \"tags\": [] to clear them)")
+	}
+
+	if cmd.Bool("dry-run") {
+		if mode != output.ModeHuman {
+			return emitItemMutations(w, mode, output.NewLibrary(lib), []output.ItemMutation{record})
+		}
+		fmt.Fprintln(w, "\nDry run — nothing was written.")
+		return nil
+	}
+	if mode == output.ModeHuman && !cmd.Bool("yes") {
+		if fromStdin {
+			return errors.New("the item JSON was read from stdin, so I cannot prompt — re-run with --yes (or --dry-run), or use --file")
+		}
+		if !confirm(os.Stdin, w, fmt.Sprintf("Replace %s? Fields you omitted will be reset.", key)) {
+			fmt.Fprintln(w, "Aborted.")
+			return nil
+		}
+	}
+
+	if err := ensureLocalKey(ctx, c); err != nil {
+		return err
+	}
+	if err := c.ReplaceItem(ctx, lib, key, full, item.Version); err != nil {
+		return writeFriendly(err)
+	}
+	if mode != output.ModeHuman {
+		record.Status = "replaced"
+		return emitItemMutations(w, mode, output.NewLibrary(lib), []output.ItemMutation{record})
+	}
+	fmt.Fprintf(w, "replaced %s\n", key)
+	return nil
+}
+
+// parseReplaceInput requires a single, whole item object. It insists on
+// itemType, since a full replacement without one is always rejected by Zotero
+// and the error is clearer here.
+func parseReplaceInput(raw []byte) (json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return nil, errors.New("no item JSON provided")
+	}
+	if trimmed[0] != '{' {
+		return nil, errors.New("a replacement must be a single JSON object (the whole item)")
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &m); err != nil {
+		return nil, fmt.Errorf("invalid item JSON: %w", err)
+	}
+	if _, ok := m["itemType"]; !ok {
+		return nil, errors.New("a full-replace object must include itemType")
+	}
+	return json.RawMessage(trimmed), nil
+}
+
+// replaceContext pulls the type and title from an incoming replacement object.
+func replaceContext(full json.RawMessage) (itemType, title string) {
+	var m struct {
+		ItemType string `json:"itemType"`
+		Title    string `json:"title"`
+	}
+	_ = json.Unmarshal(full, &m)
+	return m.ItemType, m.Title
+}
+
+// orField returns primary when set, otherwise fallback.
+func orField(primary, fallback string) string {
+	if primary != "" {
+		return primary
+	}
+	return fallback
 }
 
 func itemDeleteCommand() *cli.Command {
