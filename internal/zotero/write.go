@@ -286,6 +286,23 @@ func (c *Client) patchObject(ctx context.Context, path string, patch json.RawMes
 	return nil
 }
 
+// putObject overwrites one object with a complete representation (PUT). Unlike
+// patchObject, fields absent from body are reset to their defaults, so the
+// caller must send the whole object. Version-guarded; success is 204.
+func (c *Client) putObject(ctx context.Context, path string, body json.RawMessage, ifUnmodifiedSince int) error {
+	status, respBody, err := c.writeRequest(ctx, http.MethodPut, path, writeOptions{
+		body:              body,
+		ifUnmodifiedSince: &ifUnmodifiedSince,
+	})
+	if err != nil {
+		return err
+	}
+	if status != http.StatusNoContent {
+		return StatusError{StatusCode: status, Body: snippet(respBody)}
+	}
+	return nil
+}
+
 // deleteByQuery issues a version-guarded DELETE whose targets are named in the
 // query string (itemKey=/collectionKey=/tag=). Success is 204.
 func (c *Client) deleteByQuery(ctx context.Context, path string, q url.Values, ifUnmodifiedSince int) error {
@@ -310,6 +327,16 @@ func (c *Client) CreateItems(ctx context.Context, lib LibraryRef, items []json.R
 // PatchItem applies a partial update (a JSON object of fields to change) to one item.
 func (c *Client) PatchItem(ctx context.Context, lib LibraryRef, key string, patch json.RawMessage, ifUnmodifiedSince int) error {
 	return c.patchObject(ctx, c.profile.LibraryPrefix(lib)+"/items/"+url.PathEscape(key), patch, ifUnmodifiedSince)
+}
+
+// ReplaceItem overwrites one item with a complete JSON representation (PUT).
+// Fields absent from full are reset to their defaults — unlike PatchItem, which
+// leaves them — so the caller must send the whole object. One field is verified
+// to behave otherwise against the local API: an omitted "tags" is preserved
+// rather than cleared, so a caller that means to strip tags must send
+// "tags": []. (Omitted "collections" is cleared, like ordinary fields.)
+func (c *Client) ReplaceItem(ctx context.Context, lib LibraryRef, key string, full json.RawMessage, ifUnmodifiedSince int) error {
+	return c.putObject(ctx, c.profile.LibraryPrefix(lib)+"/items/"+url.PathEscape(key), full, ifUnmodifiedSince)
 }
 
 // DeleteItems removes items by key in one request (itemKey=…).

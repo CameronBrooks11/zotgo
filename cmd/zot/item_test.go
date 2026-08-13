@@ -140,9 +140,11 @@ func TestPatchFields_Sorted(t *testing.T) {
 type itemWriteFake struct {
 	createBody   string
 	patchStatus  int
+	putStatus    int
 	deleteStatus int
 	writes       atomic.Int32
 	patches      atomic.Int32
+	puts         atomic.Int32
 	deletes      atomic.Int32
 }
 
@@ -169,6 +171,13 @@ func newItemWriteFake(t *testing.T, fake *itemWriteFake) *httptest.Server {
 		case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/api/users/0/items/"):
 			fake.patches.Add(1)
 			status := fake.patchStatus
+			if status == 0 {
+				status = http.StatusNoContent
+			}
+			w.WriteHeader(status)
+		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/api/users/0/items/"):
+			fake.puts.Add(1)
+			status := fake.putStatus
 			if status == 0 {
 				status = http.StatusNoContent
 			}
@@ -408,6 +417,56 @@ func TestItemPatchMachineArrayAndSortedFields(t *testing.T) {
 	doc = decodeItemMutationDocument(t, got)
 	if len(doc.Data) != 1 || doc.Data[0].Status != "patched" || fake.patches.Load() != 1 {
 		t.Fatalf("data = %+v, patches = %d", doc.Data, fake.patches.Load())
+	}
+}
+
+func TestParseReplaceInput(t *testing.T) {
+	if _, err := parseReplaceInput([]byte(`{"itemType":"book","title":"Whole"}`)); err != nil {
+		t.Errorf("valid full object → %v", err)
+	}
+	for name, in := range map[string]string{
+		"empty":      `   `,
+		"array":      `[{"itemType":"book"}]`,
+		"bad":        `{nope`,
+		"noItemType": `{"title":"missing type"}`,
+	} {
+		if _, err := parseReplaceInput([]byte(in)); err == nil {
+			t.Errorf("%s should error", name)
+		}
+	}
+}
+
+func TestItemReplaceMachine(t *testing.T) {
+	fake := &itemWriteFake{}
+	srv := newItemWriteFake(t, fake)
+	defer srv.Close()
+	file := itemInputFile(t, `{"itemType":"book","title":"Replaced Title"}`)
+
+	// Dry run: planned, no write, context from the new object.
+	got, _, err := runCLI(srv.URL, "--json", "item", "replace", "AAAA1111", "--dry-run", "--file", file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := decodeItemMutationDocument(t, got)
+	if len(doc.Data) != 1 || doc.Data[0].Operation != "replace" || doc.Data[0].Status != "planned" {
+		t.Fatalf("dry-run record = %+v", doc.Data)
+	}
+	if doc.Data[0].Type != "book" || doc.Data[0].Title != "Replaced Title" {
+		t.Fatalf("context not taken from new object: %+v", doc.Data[0])
+	}
+	if fake.puts.Load() != 0 {
+		t.Fatal("dry run performed a PUT")
+	}
+
+	// Real replace: one PUT, status replaced.
+	storeItemWriteKey(t)
+	got, _, err = runCLI(srv.URL, "--json", "item", "replace", "AAAA1111", "--yes", "--file", file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc = decodeItemMutationDocument(t, got)
+	if len(doc.Data) != 1 || doc.Data[0].Status != "replaced" || fake.puts.Load() != 1 {
+		t.Fatalf("record = %+v, puts = %d", doc.Data, fake.puts.Load())
 	}
 }
 

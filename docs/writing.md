@@ -13,11 +13,16 @@ zot item template book                 # print a blank skeleton for an item type
 zot item template book > b.json        # …fill it in, then:
 zot item create --file b.json          # create (also reads JSON on stdin)
 zot item patch KEY < patch.json        # partial update; fields you omit are untouched
+zot item replace KEY < full.json       # full replace; fields you omit are reset
 zot item delete KEY1 KEY2              # destructive; lists what it will remove first
 ```
 
 `create` accepts a single item object or an array. `patch` takes a JSON object of
-just the fields to change.
+just the fields to change. `replace` takes a **whole** item object (it must
+include `itemType`) and overwrites the item: any field you leave out is reset to
+its default — with one exception, verified against Zotero, that an omitted `tags`
+is *preserved* rather than cleared, so send `"tags": []` to strip them. Prefer
+`patch` unless you specifically want that reset behaviour.
 
 Item writes support stable machine output:
 
@@ -40,12 +45,14 @@ Zotero response.
 ```bash
 zot collection create "Smart Grid" -p PARENTKEY   # -p/--parent is optional
 zot collection rename KEY "New Name"
+zot collection move KEY --to PARENTKEY            # reparent; --to-top moves to the top level
 zot collection delete KEY                          # the collection's items are kept
 ```
 
 Collection writes support the same machine output as items: `--json` returns a
 `collection-mutations` array, `--jsonl` one `collection-mutation` per line, with
-statuses `planned`, `created`, `renamed`, `deleted`, `notFound`, and `failed`.
+statuses `planned`, `created`, `renamed`, `moved`, `deleted`, `notFound`, and
+`failed`.
 
 ## Tags
 
