@@ -23,7 +23,9 @@ Planned and outstanding work is tracked in the
 
 - `list` and `search` with `--limit 0 --jsonl` now stream results page by page
   instead of buffering the whole library before writing, so a very large library
-  is no longer held in memory all at once. The output is unchanged.
+  is no longer held in memory all at once. Successful output is unchanged; an
+  error partway through now leaves the already-streamed lines on stdout (with a
+  non-zero exit) rather than nothing.
 
 ## [0.7.0] - 2026-08-12
 
