@@ -10,6 +10,12 @@ Planned and outstanding work is tracked in the
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-12
+
+Machine-readable item writes plus two local-write correctness fixes — the
+project's first external contributions
+([@schmidma](https://github.com/schmidma)).
+
 ### Added
 
 - Stable JSON/JSONL mutation records for item create, patch, and delete,
@@ -106,7 +112,8 @@ contract before scripts could depend on it.
   `collections`, `stats`. Zero-dependency static binary and a goreleaser release
   pipeline.
 
-[Unreleased]: https://github.com/CameronBrooks11/zotgo/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/CameronBrooks11/zotgo/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.3.0...v0.5.0
 [0.3.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.2.0...v0.3.0
