@@ -24,26 +24,40 @@ for every command, so a script learns it once:
 ```
 
 `kind` says what `data` holds: `items`, `item`, `collections`, `collection`,
-`stats`, `health`, or `item-mutations`. A `health` document carries `endpoint`
-and `capabilities`, so a script can check for `write` support rather than assume
-it. `schema` is bumped only when a field changes meaning or disappears — new
-fields may appear at any time, so ignore the ones you don't know.
+`stats`, `health`, or one of the mutation kinds (`item-mutations`,
+`collection-mutations`, `tag-mutations`, and their singular `*-mutation` forms
+under `--jsonl`). A `health` document carries `endpoint` and `capabilities`, so a
+script can check for `write` support rather than assume it. `schema` is bumped
+only when a field changes meaning or disappears — new fields may appear at any
+time, so ignore the ones you don't know.
 
-### Item writes
+### Writes
 
-`zot item create`, `patch`, and `delete` emit an `item-mutations` document whose
-`data` is always an array, including a single create or patch. Every record has
-the request `index`, its `operation`, and a status such as `planned`, `created`,
-`unchanged`, `failed`, `patched`, `deleted`, or `notFound`. Context fields (`key`,
-`type`, `title`, and sorted patch `fields`) appear when known; failed creates
-carry a structured `failure` with `code` and `message`. Dry runs use `planned`
-and perform no authorization or write.
+Every write command emits a mutation document whose `data` is always an array,
+even for a single object. Each record carries the request `index`, its
+`operation`, and a `status`; dry runs use `planned` and perform no authorization
+or write. Records preserve request order, and a partial batch emits every
+outcome before the command exits with status 1. Mutation documents have no
+pagination `meta` and never expose Zotero object versions or the raw request
+body.
 
-Non-dry-run item writes require `--yes` with `--json` or `--jsonl`. This prevents
-an automation command from falling back to an interactive prompt. A partial
-create emits all per-item outcomes in request order, then exits with status 1.
-Mutation documents have no pagination `meta` and never expose Zotero object
-versions or the raw request body.
+- **Items** — `zot item create`, `patch`, `delete` → `item-mutations`. Statuses:
+  `planned`, `created`, `unchanged`, `patched`, `deleted`, `notFound`, `failed`.
+  Context fields `key`, `type`, `title`, and sorted patch `fields` appear when
+  known; a failed create carries a structured `failure` with `code` and
+  `message`.
+- **Collections** — `zot collection create`, `rename`, `delete` →
+  `collection-mutations`. Statuses: `planned`, `created`, `renamed`, `deleted`,
+  `notFound`, `unchanged`, `failed`. Records carry `key`, `name`, and `parentKey`
+  when known.
+- **Tags** — `zot tag add`, `remove`, `delete` → `tag-mutations`. Each requested
+  tag is one record with its `tag` name; `add`/`remove` also carry the target
+  `item`, while the library-wide `delete` omits it. Statuses: `planned`, `added`,
+  `removed`, `deleted`, `unchanged`. A tag already in the desired state is
+  reported `unchanged` and triggers no write.
+
+Non-dry-run machine writes require `--yes` with `--json` or `--jsonl`, so an
+automation command never falls back to an interactive prompt.
 
 ### No `version` field
 
@@ -59,8 +73,8 @@ explicitly outside this contract.
 
 `--jsonl` emits one document per line, each repeating `schema`, `kind`, and
 `library`. Every line therefore stands alone, and a stream survives being
-truncated, split, or concatenated with another. Item write records use the
-singular kind `item-mutation`:
+truncated, split, or concatenated with another. Write records use the singular
+kind (`item-mutation`, `collection-mutation`, `tag-mutation`), one per line:
 
 ```sh
 zot --jsonl list | jq -r '.data | "\(.key)\t\(.title)"'
@@ -70,6 +84,6 @@ zot --jsonl list | jq -r '.data | "\(.key)\t\(.title)"'
 
 `--raw` passes Zotero's API response straight through. It is an escape hatch for
 fields zotgo does not model, and it is **not covered by `schema`**: its shape is
-Zotero's and changes when Zotero changes. `stats`, `doctor`, and the three item
-write commands reject `--raw`, because their output is derived and is not a raw
-Zotero response.
+Zotero's and changes when Zotero changes. `stats`, `doctor`, and every write
+command (item, collection, and tag) reject `--raw`, because their output is
+derived and is not a raw Zotero response.
