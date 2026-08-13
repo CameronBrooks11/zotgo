@@ -331,11 +331,7 @@ func itemPatchAction(ctx context.Context, cmd *cli.Command) error {
 	if err := ensureLocalKey(ctx, c); err != nil {
 		return err
 	}
-	version, err := c.LibraryVersion(ctx, lib)
-	if err != nil {
-		return friendly(err)
-	}
-	if err := c.PatchItem(ctx, lib, key, patch, version); err != nil {
+	if err := c.PatchItem(ctx, lib, key, patch, item.Version); err != nil {
 		return writeFriendly(err)
 	}
 	fmt.Fprintf(w, "patched %s\n", key)

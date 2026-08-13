@@ -179,15 +179,11 @@ func itemTagAction(ctx context.Context, cmd *cli.Command, add bool) error {
 	if err := ensureLocalKey(ctx, c); err != nil {
 		return err
 	}
-	version, err := c.LibraryVersion(ctx, lib)
-	if err != nil {
-		return friendly(err)
-	}
 	patch, err := tagsPatch(next)
 	if err != nil {
 		return err
 	}
-	if err := c.PatchItem(ctx, lib, itemKey, patch, version); err != nil {
+	if err := c.PatchItem(ctx, lib, itemKey, patch, item.Version); err != nil {
 		return writeFriendly(err)
 	}
 	fmt.Fprintf(w, "updated tags on %s\n", itemKey)
