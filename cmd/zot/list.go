@@ -41,11 +41,7 @@ func listCommand() *cli.Command {
 			}
 
 			if opts.Limit == 0 {
-				items, err := c.AllItems(ctx, lib, opts)
-				if err != nil {
-					return friendly(err)
-				}
-				return emitItems(cmd, lib, items, len(items), len(items))
+				return emitItemsAll(ctx, cmd, c, lib, opts)
 			}
 
 			items, page, err := c.Items(ctx, lib, opts)
@@ -55,6 +51,33 @@ func listCommand() *cli.Command {
 			return emitItems(cmd, lib, items, len(items), page.TotalResults)
 		},
 	}
+}
+
+// emitItemsAll emits every item across all pages. Under --jsonl it streams the
+// pages as they arrive, so a very large library is never fully buffered; the
+// other modes collect the pages and emit one document, because --json wraps the
+// whole set (with counts) and --raw and human output are not line-oriented.
+func emitItemsAll(ctx context.Context, cmd *cli.Command, c *zotero.Client, lib zotero.LibraryRef, opts zotero.ItemsOptions) error {
+	mode, err := outputMode(cmd)
+	if err != nil {
+		return err
+	}
+	if mode == output.ModeJSONL {
+		w := out(cmd)
+		libDTO := output.NewLibrary(lib)
+		err := c.IterItems(ctx, lib, opts, func(items []zotero.Envelope) error {
+			return output.WriteJSONL(w, output.KindItem, libDTO, output.NewItems(items))
+		})
+		if err != nil {
+			return friendly(err)
+		}
+		return nil
+	}
+	items, err := c.AllItems(ctx, lib, opts)
+	if err != nil {
+		return friendly(err)
+	}
+	return emitItems(cmd, lib, items, len(items), len(items))
 }
 
 // emitItems prints items as a table, or in whichever machine mode was selected.

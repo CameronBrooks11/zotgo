@@ -77,21 +77,39 @@ func itemsPath(profile Profile, library LibraryRef, opts ItemsOptions) string {
 // AllItems follows Link rel="next" and returns the full result set.
 func (c *Client) AllItems(ctx context.Context, library LibraryRef, opts ItemsOptions) ([]Envelope, error) {
 	var all []Envelope
+	err := c.IterItems(ctx, library, opts, func(items []Envelope) error {
+		all = append(all, items...)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return all, nil
+}
+
+// IterItems fetches items one page at a time and passes each page to yield in
+// order, so a caller can process a very large library without ever holding all
+// of it in memory. Pagination, the start cursor, and Web API backoff are handled
+// exactly as AllItems. If yield returns an error, iteration stops and that error
+// is returned unchanged; a nil error runs to the last page.
+func (c *Client) IterItems(ctx context.Context, library LibraryRef, opts ItemsOptions, yield func([]Envelope) error) error {
 	for {
 		items, page, err := c.Items(ctx, library, opts)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		all = append(all, items...)
+		if err := yield(items); err != nil {
+			return err
+		}
 		start, more, err := nextStart(page.NextURL, opts.Start)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if !more {
-			return all, nil
+			return nil
 		}
 		if err := c.honorBackoff(ctx, page); err != nil {
-			return nil, err
+			return err
 		}
 		opts.Start = start
 	}
