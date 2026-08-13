@@ -15,6 +15,15 @@ Planned and outstanding work is tracked in the
 - Stable JSON/JSONL mutation records for item create, patch, and delete,
   including dry runs and ordered partial outcomes.
 
+### Fixed
+
+- Accept the empty version some Zotero 10 beta builds return for untouched
+  migrated objects, instead of rejecting the entire response
+  ([zotero/zotero#6016](https://github.com/zotero/zotero/issues/6016)).
+- Single-object patches (item, tag, collection) now guard on the object's own
+  version, so an unrelated library change no longer rejects a valid edit with a
+  version conflict.
+
 ## [0.6.0] - 2026-07-29
 
 Local writes, against Zotero's official local write API
