@@ -19,6 +19,22 @@ zot item delete KEY1 KEY2              # destructive; lists what it will remove 
 `create` accepts a single item object or an array. `patch` takes a JSON object of
 just the fields to change.
 
+Item writes support stable machine output:
+
+```bash
+zot --json item create --yes --file items.json
+zot --jsonl item patch KEY --yes < patch.json
+zot --json item delete KEY1 KEY2 --dry-run
+```
+
+JSON always returns an `item-mutations` array; JSONL emits one self-describing
+`item-mutation` document per requested item. Records preserve request order and
+report `planned`, successful, missing, unchanged, or failed outcomes without
+exposing raw item input or Zotero versions. Non-dry-run machine writes require
+`--yes`; machine dry runs do not authorize or write. `--raw` is unavailable for
+item writes because their result is a zotgo-derived mutation report, not one raw
+Zotero response.
+
 ## Collections
 
 ```bash

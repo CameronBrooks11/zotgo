@@ -10,6 +10,11 @@ Planned and outstanding work is tracked in the
 
 ## [Unreleased]
 
+### Added
+
+- Stable JSON/JSONL mutation records for item create, patch, and delete,
+  including dry runs and ordered partial outcomes.
+
 ## [0.6.0] - 2026-07-29
 
 Local writes, against Zotero's official local write API
