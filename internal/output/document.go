@@ -28,6 +28,11 @@ const (
 	KindHealth        Kind = "health"
 	KindItemMutation  Kind = "item-mutation"
 	KindItemMutations Kind = "item-mutations"
+
+	KindCollectionMutation  Kind = "collection-mutation"
+	KindCollectionMutations Kind = "collection-mutations"
+	KindTagMutation         Kind = "tag-mutation"
+	KindTagMutations        Kind = "tag-mutations"
 )
 
 // Document is the envelope wrapping every machine-readable response.

@@ -10,6 +10,7 @@ import (
 
 	"github.com/urfave/cli/v3"
 
+	"github.com/CameronBrooks11/zotgo/internal/output"
 	"github.com/CameronBrooks11/zotgo/internal/zotero"
 )
 
@@ -39,6 +40,10 @@ func tagDeleteCommand() *cli.Command {
 }
 
 func tagDeleteAction(ctx context.Context, cmd *cli.Command) error {
+	mode, err := machineWriteMode(cmd, "tag")
+	if err != nil {
+		return err
+	}
 	if cmd.Bool("web") {
 		return errors.New("writes are local-only; the --web profile is read-only")
 	}
@@ -59,17 +64,26 @@ func tagDeleteAction(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	w := out(cmd)
-	fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
-	fmt.Fprintln(w, "Will remove these tags from EVERY item:")
-	for _, n := range names {
-		fmt.Fprintf(w, "  - %s\n", n)
+	records := make([]output.TagMutation, 0, len(names))
+	for i, n := range names {
+		records = append(records, output.TagMutation{Index: i, Operation: "delete", Status: "planned", Tag: n})
+	}
+	if mode == output.ModeHuman {
+		fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
+		fmt.Fprintln(w, "Will remove these tags from EVERY item:")
+		for _, n := range names {
+			fmt.Fprintf(w, "  - %s\n", n)
+		}
 	}
 
 	if cmd.Bool("dry-run") {
+		if mode != output.ModeHuman {
+			return emitTagMutations(w, mode, output.NewLibrary(lib), records)
+		}
 		fmt.Fprintln(w, "\nDry run — nothing was deleted.")
 		return nil
 	}
-	if !cmd.Bool("yes") && !confirm(os.Stdin, w, fmt.Sprintf("Remove %d tag(s) from all items? This cannot be undone.", len(names))) {
+	if mode == output.ModeHuman && !cmd.Bool("yes") && !confirm(os.Stdin, w, fmt.Sprintf("Remove %d tag(s) from all items? This cannot be undone.", len(names))) {
 		fmt.Fprintln(w, "Aborted.")
 		return nil
 	}
@@ -83,6 +97,12 @@ func tagDeleteAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	if err := c.DeleteTags(ctx, lib, names, version); err != nil {
 		return writeFriendly(err)
+	}
+	if mode != output.ModeHuman {
+		for i := range records {
+			records[i].Status = "deleted"
+		}
+		return emitTagMutations(w, mode, output.NewLibrary(lib), records)
 	}
 	fmt.Fprintf(w, "removed %d tag(s)\n", len(names))
 	return nil
@@ -119,6 +139,10 @@ func tagRemoveCommand() *cli.Command {
 // itemTagAction adds or removes tags on a single item by reading its tags,
 // splicing them, and patching the whole array back (the item write replaces it).
 func itemTagAction(ctx context.Context, cmd *cli.Command, add bool) error {
+	mode, err := machineWriteMode(cmd, "tag")
+	if err != nil {
+		return err
+	}
 	if cmd.Bool("web") {
 		return errors.New("writes are local-only; the --web profile is read-only")
 	}
@@ -150,28 +174,57 @@ func itemTagAction(ctx context.Context, cmd *cli.Command, add bool) error {
 
 	var next []zotero.Tag
 	var changed []string
-	verb := "add"
+	verb, past := "add", "added"
 	if add {
 		next, changed = addTags(data.Tags, names)
 	} else {
 		next, changed = removeTags(data.Tags, names)
-		verb = "remove"
+		verb, past = "remove", "removed"
+	}
+
+	// One record per requested tag, in order: the ones actually spliced are
+	// "planned" (and become past-tense after the write), the rest "unchanged".
+	// changed lists each affected tag once, so a name repeated on the command
+	// line is credited to its first occurrence and duplicates read "unchanged" —
+	// the splice only adds or removes it once.
+	remaining := make(map[string]int, len(changed))
+	for _, n := range changed {
+		remaining[n]++
+	}
+	records := make([]output.TagMutation, 0, len(names))
+	for i, n := range names {
+		status := "unchanged"
+		if remaining[n] > 0 {
+			status = "planned"
+			remaining[n]--
+		}
+		records = append(records, output.TagMutation{Index: i, Operation: verb, Status: status, Tag: n, Item: itemKey})
 	}
 
 	w := out(cmd)
-	fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
-	fmt.Fprintf(w, "%s (%s): %s\n", itemKey, item.ItemType(), orDash(item.Title()))
+	if mode == output.ModeHuman {
+		fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
+		fmt.Fprintf(w, "%s (%s): %s\n", itemKey, item.ItemType(), orDash(item.Title()))
+	}
 	if len(changed) == 0 {
+		if mode != output.ModeHuman {
+			return emitTagMutations(w, mode, output.NewLibrary(lib), records)
+		}
 		fmt.Fprintf(w, "No change — nothing to %s.\n", verb)
 		return nil
 	}
-	fmt.Fprintf(w, "  %s tags: %s\n", verb, strings.Join(changed, ", "))
+	if mode == output.ModeHuman {
+		fmt.Fprintf(w, "  %s tags: %s\n", verb, strings.Join(changed, ", "))
+	}
 
 	if cmd.Bool("dry-run") {
+		if mode != output.ModeHuman {
+			return emitTagMutations(w, mode, output.NewLibrary(lib), records)
+		}
 		fmt.Fprintln(w, "\nDry run — nothing was written.")
 		return nil
 	}
-	if !cmd.Bool("yes") && !confirm(os.Stdin, w, fmt.Sprintf("%s %d tag(s) on %s?", capitalize(verb), len(changed), itemKey)) {
+	if mode == output.ModeHuman && !cmd.Bool("yes") && !confirm(os.Stdin, w, fmt.Sprintf("%s %d tag(s) on %s?", capitalize(verb), len(changed), itemKey)) {
 		fmt.Fprintln(w, "Aborted.")
 		return nil
 	}
@@ -185,6 +238,14 @@ func itemTagAction(ctx context.Context, cmd *cli.Command, add bool) error {
 	}
 	if err := c.PatchItem(ctx, lib, itemKey, patch, item.Version); err != nil {
 		return writeFriendly(err)
+	}
+	if mode != output.ModeHuman {
+		for i := range records {
+			if records[i].Status == "planned" {
+				records[i].Status = past
+			}
+		}
+		return emitTagMutations(w, mode, output.NewLibrary(lib), records)
 	}
 	fmt.Fprintf(w, "updated tags on %s\n", itemKey)
 	return nil

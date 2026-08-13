@@ -43,6 +43,10 @@ zot collection rename KEY "New Name"
 zot collection delete KEY                          # the collection's items are kept
 ```
 
+Collection writes support the same machine output as items: `--json` returns a
+`collection-mutations` array, `--jsonl` one `collection-mutation` per line, with
+statuses `planned`, `created`, `renamed`, `deleted`, `notFound`, and `failed`.
+
 ## Tags
 
 ```bash
@@ -53,6 +57,11 @@ zot tag delete urgent                    # remove a tag from EVERY item (library
 
 `tag add`/`remove` edit one item's tags and preserve the rest; `tag delete`
 strips a tag from the whole library.
+
+Tag writes emit `tag-mutations` (`--json`) or `tag-mutation` lines (`--jsonl`),
+one record per requested tag. `add`/`remove` carry the target `item` and report
+`added`, `removed`, or `unchanged` (a tag already in the desired state triggers
+no write); `delete` reports `planned` then `deleted` and omits `item`.
 
 ## Safety and authorization
 

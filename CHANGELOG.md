@@ -10,6 +10,15 @@ Planned and outstanding work is tracked in the
 
 ## [Unreleased]
 
+### Added
+
+- Machine-readable output for collection and tag writes: `collection create`,
+  `rename`, `delete` emit `collection-mutations`, and `tag add`, `remove`,
+  `delete` emit `tag-mutations`, matching the item write contract (stable
+  `--json`/`--jsonl` records, dry-run `planned` outcomes, `--yes` required for
+  non-dry-run machine writes, and `--raw` refused). Completes the machine-output
+  parity started in #30.
+
 ## [0.7.0] - 2026-08-12
 
 Machine-readable item writes plus two local-write correctness fixes — the

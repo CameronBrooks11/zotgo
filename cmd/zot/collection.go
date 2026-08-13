@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/urfave/cli/v3"
 
+	"github.com/CameronBrooks11/zotgo/internal/output"
 	"github.com/CameronBrooks11/zotgo/internal/zotero"
 )
 
@@ -39,6 +42,10 @@ func collectionCreateCommand() *cli.Command {
 }
 
 func collectionCreateAction(ctx context.Context, cmd *cli.Command) error {
+	mode, err := machineWriteMode(cmd, "collection")
+	if err != nil {
+		return err
+	}
 	if cmd.Bool("web") {
 		return errors.New("writes are local-only; the --web profile is read-only")
 	}
@@ -64,20 +71,26 @@ func collectionCreateAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
+	cols := []json.RawMessage{col}
 
 	w := out(cmd)
-	fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
-	if parent != "" {
-		fmt.Fprintf(w, "  + collection: %s (under %s)\n", name, parent)
-	} else {
-		fmt.Fprintf(w, "  + collection: %s\n", name)
+	if mode == output.ModeHuman {
+		fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
+		if parent != "" {
+			fmt.Fprintf(w, "  + collection: %s (under %s)\n", name, parent)
+		} else {
+			fmt.Fprintf(w, "  + collection: %s\n", name)
+		}
 	}
 
 	if cmd.Bool("dry-run") {
+		if mode != output.ModeHuman {
+			return emitCollectionMutations(w, mode, output.NewLibrary(lib), plannedCollectionCreates(cols))
+		}
 		fmt.Fprintln(w, "\nDry run — nothing was written.")
 		return nil
 	}
-	if !cmd.Bool("yes") && !confirm(os.Stdin, w, fmt.Sprintf("Create collection %q in %s?", name, lib.Name)) {
+	if mode == output.ModeHuman && !cmd.Bool("yes") && !confirm(os.Stdin, w, fmt.Sprintf("Create collection %q in %s?", name, lib.Name)) {
 		fmt.Fprintln(w, "Aborted.")
 		return nil
 	}
@@ -85,15 +98,108 @@ func collectionCreateAction(ctx context.Context, cmd *cli.Command) error {
 	if err := ensureLocalKey(ctx, c); err != nil {
 		return err
 	}
-	res, err := c.CreateCollections(ctx, lib, []json.RawMessage{col})
+	res, err := c.CreateCollections(ctx, lib, cols)
 	if err != nil {
 		return writeFriendly(err)
 	}
-	reportWriteResult(w, res)
+	if mode != output.ModeHuman {
+		records, resultErr := collectionCreateResults(cols, res)
+		if err := emitCollectionMutations(w, mode, output.NewLibrary(lib), records); err != nil {
+			return err
+		}
+		if resultErr != nil {
+			return resultErr
+		}
+	} else {
+		reportWriteResult(w, res)
+	}
 	if !res.Ok() {
 		return cli.Exit("", 1)
 	}
 	return nil
+}
+
+// collectionCreateContext reads the name and parent from a create request so a
+// planned or failed record can still describe the collection.
+func collectionCreateContext(index int, raw json.RawMessage) output.CollectionMutation {
+	var context struct {
+		Name             string `json:"name"`
+		ParentCollection any    `json:"parentCollection"`
+	}
+	_ = json.Unmarshal(raw, &context)
+	record := output.CollectionMutation{
+		Index:     index,
+		Operation: "create",
+		Status:    "planned",
+		Name:      context.Name,
+	}
+	if key, ok := context.ParentCollection.(string); ok {
+		record.ParentKey = key
+	}
+	return record
+}
+
+func plannedCollectionCreates(cols []json.RawMessage) []output.CollectionMutation {
+	records := make([]output.CollectionMutation, 0, len(cols))
+	for i, col := range cols {
+		records = append(records, collectionCreateContext(i, col))
+	}
+	return records
+}
+
+// collectionCreateResults maps a batch write response onto one record per
+// request, in request order, and reports a structured error if Zotero returned
+// an outcome for an index outside the request or more than one for the same one.
+func collectionCreateResults(cols []json.RawMessage, res zotero.WriteResult) ([]output.CollectionMutation, error) {
+	var problems []string
+	problems = append(problems, invalidWriteResultIndices("successful", res.Successful, len(cols))...)
+	problems = append(problems, invalidWriteResultIndices("unchanged", res.Unchanged, len(cols))...)
+	problems = append(problems, invalidWriteResultIndices("failed", res.Failed, len(cols))...)
+
+	records := make([]output.CollectionMutation, 0, len(cols))
+	for index, raw := range cols {
+		indexText := strconv.Itoa(index)
+		record := collectionCreateContext(index, raw)
+		outcomes := 0
+		if created, ok := res.Successful[indexText]; ok {
+			outcomes++
+			col := output.NewCollection(created)
+			record.Status = "created"
+			record.Key = col.Key
+			if col.Name != "" {
+				record.Name = col.Name
+			}
+			if col.ParentKey != "" {
+				record.ParentKey = col.ParentKey
+			}
+		}
+		if key, ok := res.Unchanged[indexText]; ok {
+			outcomes++
+			record.Status = "unchanged"
+			record.Key = key
+		}
+		if failure, ok := res.Failed[indexText]; ok {
+			outcomes++
+			record.Status = "failed"
+			record.Key = failure.Key
+			record.Failure = &output.MutationError{Code: failure.Code, Message: failure.Message}
+		}
+		if outcomes != 1 {
+			message := "Zotero returned no outcome for this request"
+			if outcomes > 1 {
+				message = "Zotero returned multiple outcomes for this request"
+			}
+			record.Status = "failed"
+			record.Key = ""
+			record.Failure = &output.MutationError{Message: message}
+			problems = append(problems, fmt.Sprintf("request index %d has %d outcomes", index, outcomes))
+		}
+		records = append(records, record)
+	}
+	if len(problems) != 0 {
+		return records, fmt.Errorf("invalid Zotero write response: %s", strings.Join(problems, "; "))
+	}
+	return records, nil
 }
 
 func collectionRenameCommand() *cli.Command {
@@ -110,6 +216,10 @@ func collectionRenameCommand() *cli.Command {
 }
 
 func collectionRenameAction(ctx context.Context, cmd *cli.Command) error {
+	mode, err := machineWriteMode(cmd, "collection")
+	if err != nil {
+		return err
+	}
 	if cmd.Bool("web") {
 		return errors.New("writes are local-only; the --web profile is read-only")
 	}
@@ -136,15 +246,21 @@ func collectionRenameAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	data, _ := col.CollectionData()
 
+	record := output.CollectionMutation{Index: 0, Operation: "rename", Status: "planned", Key: key, Name: name}
 	w := out(cmd)
-	fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
-	fmt.Fprintf(w, "Rename %s: %s → %s\n", key, orDash(data.Name), name)
+	if mode == output.ModeHuman {
+		fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
+		fmt.Fprintf(w, "Rename %s: %s → %s\n", key, orDash(data.Name), name)
+	}
 
 	if cmd.Bool("dry-run") {
+		if mode != output.ModeHuman {
+			return emitCollectionMutations(w, mode, output.NewLibrary(lib), []output.CollectionMutation{record})
+		}
 		fmt.Fprintln(w, "\nDry run — nothing was written.")
 		return nil
 	}
-	if !cmd.Bool("yes") && !confirm(os.Stdin, w, fmt.Sprintf("Rename %s?", key)) {
+	if mode == output.ModeHuman && !cmd.Bool("yes") && !confirm(os.Stdin, w, fmt.Sprintf("Rename %s?", key)) {
 		fmt.Fprintln(w, "Aborted.")
 		return nil
 	}
@@ -158,6 +274,10 @@ func collectionRenameAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	if err := c.PatchCollection(ctx, lib, key, patch, col.Version); err != nil {
 		return writeFriendly(err)
+	}
+	if mode != output.ModeHuman {
+		record.Status = "renamed"
+		return emitCollectionMutations(w, mode, output.NewLibrary(lib), []output.CollectionMutation{record})
 	}
 	fmt.Fprintf(w, "renamed %s\n", key)
 	return nil
@@ -177,6 +297,10 @@ func collectionDeleteCommand() *cli.Command {
 }
 
 func collectionDeleteAction(ctx context.Context, cmd *cli.Command) error {
+	mode, err := machineWriteMode(cmd, "collection")
+	if err != nil {
+		return err
+	}
 	if cmd.Bool("web") {
 		return errors.New("writes are local-only; the --web profile is read-only")
 	}
@@ -197,13 +321,19 @@ func collectionDeleteAction(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	w := out(cmd)
-	fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
-	fmt.Fprintln(w, "Will delete (their items are kept):")
-	var found []string
-	for _, key := range keys {
+	if mode == output.ModeHuman {
+		fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
+		fmt.Fprintln(w, "Will delete (their items are kept):")
+	}
+	found := make([]string, 0, len(keys))
+	records := make([]output.CollectionMutation, 0, len(keys))
+	for index, key := range keys {
 		col, err := c.Collection(ctx, lib, key)
 		if errors.Is(err, zotero.ErrNotFound) {
-			fmt.Fprintf(w, "  ! %s — not found, skipping\n", key)
+			records = append(records, output.CollectionMutation{Index: index, Operation: "delete", Status: "notFound", Key: key})
+			if mode == output.ModeHuman {
+				fmt.Fprintf(w, "  ! %s — not found, skipping\n", key)
+			}
 			continue
 		}
 		if err != nil {
@@ -211,18 +341,27 @@ func collectionDeleteAction(ctx context.Context, cmd *cli.Command) error {
 		}
 		data, _ := col.CollectionData()
 		found = append(found, key)
-		fmt.Fprintf(w, "  - %s: %s\n", key, orDash(data.Name))
+		records = append(records, output.CollectionMutation{Index: index, Operation: "delete", Status: "planned", Key: key, Name: data.Name})
+		if mode == output.ModeHuman {
+			fmt.Fprintf(w, "  - %s: %s\n", key, orDash(data.Name))
+		}
 	}
 	if len(found) == 0 {
+		if mode != output.ModeHuman {
+			return emitCollectionMutations(w, mode, output.NewLibrary(lib), records)
+		}
 		fmt.Fprintln(w, "Nothing to delete.")
 		return nil
 	}
 
 	if cmd.Bool("dry-run") {
+		if mode != output.ModeHuman {
+			return emitCollectionMutations(w, mode, output.NewLibrary(lib), records)
+		}
 		fmt.Fprintln(w, "\nDry run — nothing was deleted.")
 		return nil
 	}
-	if !cmd.Bool("yes") && !confirm(os.Stdin, w, fmt.Sprintf("Delete %d collection(s)? This cannot be undone.", len(found))) {
+	if mode == output.ModeHuman && !cmd.Bool("yes") && !confirm(os.Stdin, w, fmt.Sprintf("Delete %d collection(s)? This cannot be undone.", len(found))) {
 		fmt.Fprintln(w, "Aborted.")
 		return nil
 	}
@@ -236,6 +375,14 @@ func collectionDeleteAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	if err := c.DeleteCollections(ctx, lib, found, version); err != nil {
 		return writeFriendly(err)
+	}
+	if mode != output.ModeHuman {
+		for i := range records {
+			if records[i].Status == "planned" {
+				records[i].Status = "deleted"
+			}
+		}
+		return emitCollectionMutations(w, mode, output.NewLibrary(lib), records)
 	}
 	fmt.Fprintf(w, "deleted %d collection(s)\n", len(found))
 	return nil

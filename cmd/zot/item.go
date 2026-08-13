@@ -170,17 +170,7 @@ func printItemSummary(w io.Writer, items []json.RawMessage) {
 }
 
 func itemMutationMode(cmd *cli.Command) (output.Mode, error) {
-	mode, err := outputMode(cmd)
-	if err != nil {
-		return mode, err
-	}
-	if mode == output.ModeRaw {
-		return mode, output.ErrRawUnavailable
-	}
-	if mode != output.ModeHuman && !cmd.Bool("dry-run") && !cmd.Bool("yes") {
-		return mode, fmt.Errorf("%s item writes require --yes (or --dry-run)", mode)
-	}
-	return mode, nil
+	return machineWriteMode(cmd, "item")
 }
 
 func plannedItemCreates(items []json.RawMessage) []output.ItemMutation {
@@ -238,7 +228,7 @@ func itemCreateResults(items []json.RawMessage, res zotero.WriteResult) ([]outpu
 			outcomes++
 			record.Status = "failed"
 			record.Key = failure.Key
-			record.Failure = &output.ItemMutationError{Code: failure.Code, Message: failure.Message}
+			record.Failure = &output.MutationError{Code: failure.Code, Message: failure.Message}
 		}
 		if outcomes != 1 {
 			message := "Zotero returned no outcome for this request"
@@ -247,7 +237,7 @@ func itemCreateResults(items []json.RawMessage, res zotero.WriteResult) ([]outpu
 			}
 			record.Status = "failed"
 			record.Key = ""
-			record.Failure = &output.ItemMutationError{Message: message}
+			record.Failure = &output.MutationError{Message: message}
 			problems = append(problems, fmt.Sprintf("request index %d has %d outcomes", index, outcomes))
 		}
 		records = append(records, record)
