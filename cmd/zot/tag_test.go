@@ -215,6 +215,42 @@ func TestTagAddMachineNoChangeEmitsUnchanged(t *testing.T) {
 	}
 }
 
+func TestTagAddMachineDeduplicatesRepeatedName(t *testing.T) {
+	storeItemWriteKey(t)
+	fake := &tagWriteFake{}
+	srv := newTagWriteFake(t, fake)
+	defer srv.Close()
+
+	// "new" is absent and requested twice: the item is added to once, so the
+	// first record is "added" and the duplicate reads "unchanged".
+	got, _, err := runCLI(srv.URL, "--json", "tag", "add", "new", "new", "--item", "ITEM0001", "--yes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	recs := decodeTagMutationDocument(t, got)
+	if len(recs) != 2 || recs[0].Status != "added" || recs[1].Status != "unchanged" {
+		t.Fatalf("records = %+v", recs)
+	}
+	if fake.patches.Load() != 1 {
+		t.Fatalf("patches = %d, want a single splice", fake.patches.Load())
+	}
+}
+
+func TestTagDeleteHumanDryRunOutputUnchanged(t *testing.T) {
+	fake := &tagWriteFake{}
+	srv := newTagWriteFake(t, fake)
+	defer srv.Close()
+
+	got, _, err := runCLI(srv.URL, "tag", "delete", "urgent", "todo", "--dry-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Target: My Library — " + srv.URL + "\nWill remove these tags from EVERY item:\n  - urgent\n  - todo\n\nDry run — nothing was deleted.\n"
+	if got != want {
+		t.Fatalf("human output changed:\ngot  %q\nwant %q", got, want)
+	}
+}
+
 func TestTagDeleteMachine(t *testing.T) {
 	fake := &tagWriteFake{}
 	srv := newTagWriteFake(t, fake)

@@ -281,6 +281,21 @@ func TestCollectionMachineRawRejectedAndYesRequiredEarly(t *testing.T) {
 	}
 }
 
+func TestCollectionDeleteHumanDryRunOutputUnchanged(t *testing.T) {
+	fake := &collectionWriteFake{}
+	srv := newCollectionWriteFake(t, fake)
+	defer srv.Close()
+
+	got, _, err := runCLI(srv.URL, "collection", "delete", "COLL0001", "MISS1", "--dry-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Target: My Library — " + srv.URL + "\nWill delete (their items are kept):\n  - COLL0001: Name COLL0001\n  ! MISS1 — not found, skipping\n\nDry run — nothing was deleted.\n"
+	if got != want {
+		t.Fatalf("human output changed:\ngot  %q\nwant %q", got, want)
+	}
+}
+
 func TestCollectionCreateHumanDryRunOutputUnchanged(t *testing.T) {
 	fake := &collectionWriteFake{}
 	srv := newCollectionWriteFake(t, fake)

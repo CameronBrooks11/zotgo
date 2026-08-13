@@ -184,15 +184,19 @@ func itemTagAction(ctx context.Context, cmd *cli.Command, add bool) error {
 
 	// One record per requested tag, in order: the ones actually spliced are
 	// "planned" (and become past-tense after the write), the rest "unchanged".
-	willChange := make(map[string]bool, len(changed))
+	// changed lists each affected tag once, so a name repeated on the command
+	// line is credited to its first occurrence and duplicates read "unchanged" —
+	// the splice only adds or removes it once.
+	remaining := make(map[string]int, len(changed))
 	for _, n := range changed {
-		willChange[n] = true
+		remaining[n]++
 	}
 	records := make([]output.TagMutation, 0, len(names))
 	for i, n := range names {
 		status := "unchanged"
-		if willChange[n] {
+		if remaining[n] > 0 {
 			status = "planned"
+			remaining[n]--
 		}
 		records = append(records, output.TagMutation{Index: i, Operation: verb, Status: status, Tag: n, Item: itemKey})
 	}
