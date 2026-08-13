@@ -423,6 +423,9 @@ func itemPatchAction(ctx context.Context, cmd *cli.Command) error {
 		}
 		return friendly(err)
 	}
+	if err := validateItemPatchSafety(item, patch); err != nil {
+		return err
+	}
 
 	w := out(cmd)
 	fields := patchFields(patch)
@@ -523,6 +526,9 @@ func itemReplaceAction(ctx context.Context, cmd *cli.Command) error {
 			return fmt.Errorf("no item with key %q in %s", key, lib.Name)
 		}
 		return friendly(err)
+	}
+	if err := validateItemReplaceSafety(item, full); err != nil {
+		return err
 	}
 
 	// Describe the item with the incoming object's type/title where present,
@@ -743,6 +749,136 @@ func parsePatchInput(raw []byte) (json.RawMessage, error) {
 		return nil, errors.New("the patch is empty")
 	}
 	return json.RawMessage(trimmed), nil
+}
+
+var attachmentStorageFields = []string{"filename", "linkMode", "path"}
+
+type attachmentStorageState struct {
+	ItemType string `json:"itemType"`
+	LinkMode string `json:"linkMode"`
+}
+
+func validateItemPatchSafety(item zotero.Envelope, patch json.RawMessage) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(patch, &fields); err != nil {
+		return fmt.Errorf("decode patch fields: %w", err)
+	}
+	var changed []string
+	for _, field := range attachmentStorageFields {
+		if _, ok := fields[field]; ok {
+			changed = append(changed, field)
+		}
+	}
+	_, changesItemType := fields["itemType"]
+	if len(changed) == 0 && !changesItemType {
+		return nil
+	}
+
+	current, err := decodeAttachmentStorageState(item.Data)
+	if err != nil {
+		return fmt.Errorf("inspect item before update: %w", err)
+	}
+	proposed := current
+	if err := applyAttachmentStoragePatch(&proposed, fields); err != nil {
+		return fmt.Errorf("inspect patch: %w", err)
+	}
+	if current.ItemType != proposed.ItemType && (current.ItemType == "attachment" || proposed.ItemType == "attachment") {
+		return errors.New("itemType cannot be changed to or from attachment through the generic item command: attachment conversions need a dedicated supported operation")
+	}
+	if len(changed) == 0 {
+		return nil
+	}
+	currentManaged, err := current.managed()
+	if err != nil {
+		return fmt.Errorf("inspect item before update: %w", err)
+	}
+	proposedManaged, err := proposed.managed()
+	if err != nil {
+		return fmt.Errorf("inspect patched item: %w", err)
+	}
+	if currentManaged || proposedManaged {
+		return fmt.Errorf("%s cannot be patched when the current or resulting attachment is Zotero-managed: generic item updates change storage metadata without moving the managed file", strings.Join(changed, ", "))
+	}
+	if current.ItemType == "attachment" && current.LinkMode != proposed.LinkMode {
+		return errors.New("linkMode cannot be changed through the generic item command: storage-mode changes need a dedicated supported operation")
+	}
+	return nil
+}
+
+func validateItemReplaceSafety(item zotero.Envelope, full json.RawMessage) error {
+	current, err := decodeAttachmentStorageState(item.Data)
+	if err != nil {
+		return fmt.Errorf("inspect item before update: %w", err)
+	}
+	proposed, err := decodeAttachmentStorageState(full)
+	if err != nil {
+		return fmt.Errorf("inspect replacement item: %w", err)
+	}
+	if current.ItemType != proposed.ItemType && (current.ItemType == "attachment" || proposed.ItemType == "attachment") {
+		return errors.New("an item cannot be fully replaced across the attachment boundary through the generic item command: attachment conversions need a dedicated supported operation")
+	}
+	currentManaged, err := current.managed()
+	if err != nil {
+		return fmt.Errorf("inspect item before update: %w", err)
+	}
+	proposedManaged, err := proposed.managed()
+	if err != nil {
+		return fmt.Errorf("inspect replacement item: %w", err)
+	}
+	if currentManaged || proposedManaged {
+		return errors.New("a current or resulting Zotero-managed attachment cannot be fully replaced through the generic item command: use item patch for non-storage metadata fields")
+	}
+	if current.ItemType == "attachment" && current.LinkMode != proposed.LinkMode {
+		return errors.New("an attachment's linkMode cannot be changed through the generic item command: storage-mode changes need a dedicated supported operation")
+	}
+	return nil
+}
+
+func decodeAttachmentStorageState(data json.RawMessage) (attachmentStorageState, error) {
+	var state attachmentStorageState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return state, err
+	}
+	if state.ItemType == "" {
+		return state, errors.New("response has no itemType")
+	}
+	return state, nil
+}
+
+func applyAttachmentStoragePatch(state *attachmentStorageState, fields map[string]json.RawMessage) error {
+	if value, ok := fields["itemType"]; ok {
+		decoded, err := patchStringField("itemType", value)
+		if err != nil {
+			return err
+		}
+		state.ItemType = decoded
+	}
+	if value, ok := fields["linkMode"]; ok {
+		decoded, err := patchStringField("linkMode", value)
+		if err != nil {
+			return err
+		}
+		state.LinkMode = decoded
+	}
+	return nil
+}
+
+func patchStringField(name string, raw json.RawMessage) (string, error) {
+	var value *string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", fmt.Errorf("%s must be a string: %w", name, err)
+	}
+	if value == nil {
+		return "", fmt.Errorf("%s must be a string, not null", name)
+	}
+	return *value, nil
+}
+
+func (s attachmentStorageState) managed() (bool, error) {
+	if s.ItemType != "attachment" {
+		return false, nil
+	}
+	return zotero.ManagedAttachmentLinkMode(s.LinkMode)
 }
 
 // patchFields lists the field names a patch will set, in a stable order.
