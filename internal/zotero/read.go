@@ -135,6 +135,39 @@ func (c *Client) Item(ctx context.Context, library LibraryRef, key string) (Enve
 	return item, err
 }
 
+// RawItem reads one complete item envelope, validating only the response shape
+// and requested identity while leaving every other Zotero-owned field untouched.
+func (c *Client) RawItem(ctx context.Context, library LibraryRef, key string) (json.RawMessage, error) {
+	body, _, err := c.do(ctx, c.profile.LibraryPrefix(library)+"/items/"+url.PathEscape(key), nil)
+	if err != nil {
+		return nil, err
+	}
+	identity, err := DecodeItemIdentity(body)
+	if err != nil {
+		return nil, fmt.Errorf("decode item %q: %w", key, err)
+	}
+	if identity.Key != key {
+		return nil, fmt.Errorf("decode item %q: response has key %q", key, identity.Key)
+	}
+	return json.RawMessage(body), nil
+}
+
+// Attachment reads and decodes one attachment's bounded metadata.
+func (c *Client) Attachment(ctx context.Context, library LibraryRef, key string) (Attachment, error) {
+	raw, err := c.RawItem(ctx, library, key)
+	if err != nil {
+		return Attachment{}, err
+	}
+	if err := RequireItemType(raw, "attachment"); err != nil {
+		return Attachment{}, fmt.Errorf("decode attachment %q: %w", key, err)
+	}
+	attachment, err := DecodeAttachment(raw)
+	if err != nil {
+		return Attachment{}, fmt.Errorf("decode attachment %q: %w", key, err)
+	}
+	return attachment, nil
+}
+
 // Collection reads one collection by key.
 func (c *Client) Collection(ctx context.Context, library LibraryRef, key string) (Envelope, error) {
 	var col Envelope

@@ -10,6 +10,13 @@ Planned and outstanding work is tracked in the
 
 ## [Unreleased]
 
+### Added
+
+- `zot attachment show KEY` reports stable attachment metadata without reading
+  or resolving attachment files; JSON/JSONL use the additive `attachment` DTO
+  kind, while `--raw` preserves the complete Zotero item envelope after key and
+  item-type validation.
+
 ## [0.8.0] - 2026-08-13
 
 A symmetric machine-readable contract across every write, streaming reads for

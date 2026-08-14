@@ -43,6 +43,38 @@ func TestVersionNumberUnmarshalJSON(t *testing.T) {
 	}
 }
 
+func TestDecodeItemIdentity(t *testing.T) {
+	t.Parallel()
+
+	identity, err := DecodeItemIdentity(json.RawMessage(`{"key":"ITEM0001","future":true,"data":{"itemType":"book","future":7}}`))
+	if err != nil {
+		t.Fatalf("DecodeItemIdentity: %v", err)
+	}
+	if identity.Key != "ITEM0001" || identity.ItemType != "book" {
+		t.Fatalf("identity = %#v", identity)
+	}
+	for _, test := range []struct {
+		name string
+		raw  string
+	}{
+		{name: "array", raw: `[]`},
+		{name: "null", raw: `null`},
+		{name: "malformed", raw: `{`},
+		{name: "missing key", raw: `{"data":{"itemType":"book"}}`},
+		{name: "missing item type", raw: `{"key":"ITEM0001","data":{}}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := DecodeItemIdentity(json.RawMessage(test.raw)); err == nil {
+				t.Fatal("expected an error")
+			}
+		})
+	}
+	if err := RequireItemType(json.RawMessage(`{"key":"ITEM0001","data":{"itemType":"book"}}`), "attachment"); err == nil {
+		t.Fatal("expected item type rejection")
+	}
+}
+
 func TestEnvelopeAcceptsMigratedEmptyVersions(t *testing.T) {
 	t.Parallel()
 

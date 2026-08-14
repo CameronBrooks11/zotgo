@@ -118,6 +118,33 @@ type Tag struct {
 	Automatic bool   `json:"automatic"`
 }
 
+// Attachment is one attachment's stable metadata.
+type Attachment struct {
+	Key          string               `json:"key"`
+	ParentKey    string               `json:"parentKey"`
+	Title        string               `json:"title"`
+	LinkMode     string               `json:"linkMode"`
+	ContentType  string               `json:"contentType"`
+	Charset      string               `json:"charset"`
+	Filename     string               `json:"filename"`
+	URL          string               `json:"url"`
+	AccessDate   string               `json:"accessDate"`
+	DateAdded    string               `json:"dateAdded"`
+	DateModified string               `json:"dateModified"`
+	Tags         []Tag                `json:"tags"`
+	MD5          *string              `json:"md5"`
+	MTime        *int64               `json:"mtime"`
+	Enclosure    *AttachmentEnclosure `json:"enclosure"`
+}
+
+// AttachmentEnclosure is the file location metadata Zotero advertised.
+type AttachmentEnclosure struct {
+	Href   string `json:"href"`
+	Type   string `json:"type"`
+	Title  string `json:"title"`
+	Length *int64 `json:"length"`
+}
+
 // Collection is one collection, with its parent's key when nested. It carries no
 // version, for the reasons given on Item.
 type Collection struct {
@@ -242,6 +269,40 @@ func NewItems(envelopes []zotero.Envelope) []Item {
 		items = append(items, NewItem(e))
 	}
 	return items
+}
+
+// NewAttachment converts attachment metadata to the stable output contract.
+func NewAttachment(attachment zotero.Attachment) Attachment {
+	tags := make([]Tag, 0, len(attachment.Tags))
+	for _, tag := range attachment.Tags {
+		tags = append(tags, Tag{Name: tag.Tag, Automatic: tag.Type == automaticTagType})
+	}
+	var enclosure *AttachmentEnclosure
+	if attachment.Enclosure != nil {
+		enclosure = &AttachmentEnclosure{
+			Href:   attachment.Enclosure.Href,
+			Type:   attachment.Enclosure.Type,
+			Title:  attachment.Enclosure.Title,
+			Length: attachment.Enclosure.Length,
+		}
+	}
+	return Attachment{
+		Key:          attachment.Key,
+		ParentKey:    attachment.ParentKey,
+		Title:        attachment.Title,
+		LinkMode:     attachment.LinkMode,
+		ContentType:  attachment.ContentType,
+		Charset:      attachment.Charset,
+		Filename:     attachment.Filename,
+		URL:          attachment.URL,
+		AccessDate:   attachment.AccessDate,
+		DateAdded:    attachment.DateAdded,
+		DateModified: attachment.DateModified,
+		Tags:         tags,
+		MD5:          attachment.MD5,
+		MTime:        attachment.MTime,
+		Enclosure:    enclosure,
+	}
 }
 
 // NewCollection flattens a Zotero collection envelope.

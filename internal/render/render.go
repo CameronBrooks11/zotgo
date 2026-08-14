@@ -30,6 +30,52 @@ func Items(w io.Writer, items []zotero.Envelope) {
 	tw.Flush()
 }
 
+// Attachment writes one attachment's metadata.
+func Attachment(w io.Writer, attachment zotero.Attachment) {
+	tw := newTable(w)
+	field(tw, "Key", attachment.Key)
+	if attachment.ParentKey != "" {
+		field(tw, "Parent", attachment.ParentKey)
+	}
+	field(tw, "Title", attachment.Title)
+	field(tw, "Link mode", attachment.LinkMode)
+	field(tw, "Content type", attachment.ContentType)
+	if attachment.Charset != "" {
+		field(tw, "Charset", attachment.Charset)
+	}
+	if attachment.Filename != "" {
+		field(tw, "Filename", attachment.Filename)
+	}
+	if attachment.URL != "" {
+		field(tw, "URL", attachment.URL)
+	}
+	if attachment.AccessDate != "" {
+		field(tw, "Accessed", attachment.AccessDate)
+	}
+	if attachment.DateAdded != "" {
+		field(tw, "Added", attachment.DateAdded)
+	}
+	if attachment.DateModified != "" {
+		field(tw, "Modified", attachment.DateModified)
+	}
+	if tags := tagNames(attachment.Tags); tags != "" {
+		field(tw, "Tags", tags)
+	}
+	if attachment.MD5 != nil {
+		field(tw, "MD5", *attachment.MD5)
+	}
+	if attachment.MTime != nil {
+		field(tw, "MTime", fmt.Sprintf("%d", *attachment.MTime))
+	}
+	if attachment.Enclosure != nil {
+		field(tw, "Enclosure", attachment.Enclosure.Href)
+		if attachment.Enclosure.Length != nil {
+			field(tw, "Enclosure size", fmt.Sprintf("%d", *attachment.Enclosure.Length))
+		}
+	}
+	tw.Flush()
+}
+
 // Item writes a detailed view of a single item and its children.
 func Item(w io.Writer, item zotero.Envelope, children []zotero.Envelope) {
 	data, _ := item.ItemData()

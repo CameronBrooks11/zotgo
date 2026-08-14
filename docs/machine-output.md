@@ -23,8 +23,8 @@ for every command, so a script learns it once:
 }
 ```
 
-`kind` says what `data` holds: `items`, `item`, `collections`, `collection`,
-`stats`, `health`, or one of the mutation kinds (`item-mutations`,
+`kind` says what `data` holds: `items`, `item`, `attachment`, `collections`,
+`collection`, `stats`, `health`, or one of the mutation kinds (`item-mutations`,
 `collection-mutations`, `tag-mutations`, and their singular `*-mutation` forms
 under `--jsonl`). A `health` document carries `endpoint` and `capabilities`, so a
 script can check for `write` support rather than assume it. `schema` is bumped
@@ -59,10 +59,24 @@ body.
 Non-dry-run machine writes require `--yes` with `--json` or `--jsonl`, so an
 automation command never falls back to an interactive prompt.
 
+### Attachments
+
+`zot --json attachment show ATTACHMENT_KEY` emits one `attachment` record.
+Its bounded fields cover identity and parent, title and link mode, content and
+filename metadata, URL and dates, tags, nullable `md5`/`mtime`, and a nullable
+`enclosure`. JSONL emits the same record on one self-describing line. An
+enclosure is location and optional size metadata advertised by Zotero, not a
+portable filesystem-existence assertion.
+
+`--raw` emits Zotero's complete single-item envelope after validating only the
+response key and item type; changes to other Zotero-owned field shapes do not
+block the raw escape hatch.
+
 ### No `version` field
 
-Items and collections carry **no `version`**. A Zotero object version belongs to
-the endpoint that issued it, and the Local API's has no meaning zotgo can promise:
+Items, collections, and attachment records carry **no `version`**. A Zotero
+object version belongs to the endpoint that issued it, and the Local API's has
+no meaning zotgo can promise:
 it is the *server* version, so it does not move when you edit an item locally
 without syncing, and the local write API replaces it with an unrelated local
 counter. Sending one to the Web API as a write precondition is a data-integrity
