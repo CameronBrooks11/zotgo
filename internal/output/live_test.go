@@ -181,15 +181,15 @@ func TestLiveItemWithChildren(t *testing.T) {
 			t.Fatalf("ItemChildren(%s): %v", e.Key, err)
 		}
 		dto := NewItemWithChildren(e, children)
-		if len(dto.Children) != len(children) {
-			t.Fatalf("%s: %d children in DTO, want %d", e.Key, len(dto.Children), len(children))
+		if dto.Children == nil || len(*dto.Children) != len(children) {
+			t.Fatalf("%s: children in DTO = %v, want %d", e.Key, dto.Children, len(children))
 		}
-		for _, ch := range dto.Children {
+		for _, ch := range *dto.Children {
 			if ch.Type != "attachment" && ch.Type != "note" && ch.Type != "annotation" {
 				t.Errorf("%s: unexpected child type %q", e.Key, ch.Type)
 			}
 		}
-		t.Logf("item %s has %d children", e.Key, len(dto.Children))
+		t.Logf("item %s has %d children", e.Key, len(*dto.Children))
 		return // One item with children is enough to exercise the path.
 	}
 	t.Skip("no items with children in the sample")

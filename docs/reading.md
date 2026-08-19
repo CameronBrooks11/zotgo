@@ -9,7 +9,7 @@ zot list -c "Smart Grid" -n 50 # items in a collection, by name or key
 zot list --tag ml --tag review # items with all the given tags
 zot search "state estimation"  # search by title/creator/year
 zot search algae --everything  # include full text and notes
-zot show HRAC4E44              # one item with its attachments and notes
+zot show HRAC4E44              # one item with all direct attachments and notes
 zot attachment show ABCD1234   # attachment metadata
 zot collections               # collections as a tree (--flat for a list)
 zot stats                     # library-wide counts
