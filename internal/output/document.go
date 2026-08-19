@@ -23,6 +23,7 @@ const (
 	KindItem          Kind = "item"
 	KindItems         Kind = "items"
 	KindAttachment    Kind = "attachment"
+	KindNote          Kind = "note"
 	KindCollection    Kind = "collection"
 	KindCollections   Kind = "collections"
 	KindStats         Kind = "stats"

@@ -88,6 +88,7 @@ func rootCommand() *cli.Command {
 			showCommand(),
 			searchCommand(),
 			attachmentCommand(),
+			noteCommand(),
 			collectionsCommand(),
 			statsCommand(),
 			exportCommand(),

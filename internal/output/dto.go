@@ -118,6 +118,16 @@ type Tag struct {
 	Automatic bool   `json:"automatic"`
 }
 
+// Note is one note's stable metadata and exact Zotero rich-text HTML.
+type Note struct {
+	Key          string `json:"key"`
+	ParentKey    string `json:"parentKey"`
+	DateAdded    string `json:"dateAdded"`
+	DateModified string `json:"dateModified"`
+	Tags         []Tag  `json:"tags"`
+	HTML         string `json:"html"`
+}
+
 // Attachment is one attachment's stable metadata.
 type Attachment struct {
 	Key          string               `json:"key"`
@@ -273,6 +283,22 @@ func NewItems(envelopes []zotero.Envelope) []Item {
 		items = append(items, NewItem(e))
 	}
 	return items
+}
+
+// NewNote converts note metadata to the stable output contract.
+func NewNote(note zotero.Note) Note {
+	tags := make([]Tag, 0, len(note.Tags))
+	for _, tag := range note.Tags {
+		tags = append(tags, Tag{Name: tag.Tag, Automatic: tag.Type == automaticTagType})
+	}
+	return Note{
+		Key:          note.Key,
+		ParentKey:    note.ParentKey,
+		DateAdded:    note.DateAdded,
+		DateModified: note.DateModified,
+		Tags:         tags,
+		HTML:         note.HTML,
+	}
 }
 
 // NewAttachment converts attachment metadata to the stable output contract.

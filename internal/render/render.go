@@ -30,6 +30,27 @@ func Items(w io.Writer, items []zotero.Envelope) {
 	tw.Flush()
 }
 
+// Note writes one note's metadata followed by Zotero's rich-text HTML.
+func Note(w io.Writer, note zotero.Note) {
+	tw := newTable(w)
+	field(tw, "Key", note.Key)
+	if note.ParentKey != "" {
+		field(tw, "Parent", note.ParentKey)
+	}
+	if note.DateAdded != "" {
+		field(tw, "Added", note.DateAdded)
+	}
+	if note.DateModified != "" {
+		field(tw, "Modified", note.DateModified)
+	}
+	if tags := tagNames(note.Tags); tags != "" {
+		field(tw, "Tags", tags)
+	}
+	tw.Flush()
+	fmt.Fprintln(w, "\nHTML:")
+	fmt.Fprintln(w, note.HTML)
+}
+
 // Attachment writes one attachment's metadata.
 func Attachment(w io.Writer, attachment zotero.Attachment) {
 	tw := newTable(w)

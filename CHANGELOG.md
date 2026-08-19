@@ -16,6 +16,8 @@ Planned and outstanding work is tracked in the
   or resolving attachment files; JSON/JSONL use the additive `attachment` DTO
   kind, while `--raw` preserves the complete Zotero item envelope after key and
   item-type validation.
+- `zot note show KEY` returns one note's metadata and exact rich-text HTML;
+  `--raw` preserves the complete Zotero item envelope.
 
 ### Changed
 

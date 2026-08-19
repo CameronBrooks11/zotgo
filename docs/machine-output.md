@@ -23,8 +23,8 @@ for every command, so a script learns it once:
 }
 ```
 
-`kind` says what `data` holds: `items`, `item`, `attachment`, `collections`,
-`collection`, `stats`, `health`, or one of the mutation kinds (`item-mutations`,
+`kind` says what `data` holds: `items`, `item`, `attachment`, `note`,
+`collections`, `collection`, `stats`, `health`, or one of the mutation kinds (`item-mutations`,
 `collection-mutations`, `tag-mutations`, and their singular `*-mutation` forms
 under `--jsonl`). A `health` document carries `endpoint` and `capabilities`, so a
 script can check for `write` support rather than assume it. `schema` is bumped
@@ -75,9 +75,21 @@ portable filesystem-existence assertion.
 response key and item type; changes to other Zotero-owned field shapes do not
 block the raw escape hatch.
 
+### Notes
+
+`zot --json note show NOTE_KEY` emits one `note` record containing its key,
+parent key, dates, tags, and Zotero's exact rich-text HTML string. An empty note
+has `"html": ""`; standalone notes have `"parentKey": ""`. JSONL emits the
+same record on one self-describing line. The command never derives plain text or
+rewrites the HTML.
+
+`--raw` emits the complete single-item envelope after key and item-type
+validation, even when fields outside that identity cannot be shaped as a stable
+note record.
+
 ### No `version` field
 
-Items, collections, and attachment records carry **no `version`**. A Zotero
+Items, collections, attachment, and note records carry **no `version`**. A Zotero
 object version belongs to the endpoint that issued it, and the Local API's has
 no meaning zotgo can promise:
 it is the *server* version, so it does not move when you edit an item locally
