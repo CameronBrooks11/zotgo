@@ -130,11 +130,27 @@ func itemCreateAction(ctx context.Context, cmd *cli.Command) error {
 }
 
 // readItemInput reads the item JSON from a file, or from stdin when file is "".
+// With no file and an interactive terminal there is nothing to read, so it fails
+// with guidance rather than blocking silently on os.Stdin.
 func readItemInput(file string) ([]byte, error) {
 	if file != "" {
 		return os.ReadFile(file)
 	}
+	if isTerminal(os.Stdin) {
+		return nil, errors.New("no item JSON given — use --file, or pipe JSON to stdin (e.g. zot item template book | zot item create)")
+	}
 	return io.ReadAll(os.Stdin)
+}
+
+// isTerminal reports whether f is an interactive terminal. A read from one would
+// block waiting for typed input, so callers use this to fail with guidance
+// instead. It relies only on the standard library, keeping the client dep-free.
+func isTerminal(f *os.File) bool {
+	info, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
 }
 
 // parseItemsInput accepts either a single item object or an array of them and
@@ -291,6 +307,13 @@ func sortedIndices[V any](m map[string]V) []string {
 // ensureLocalKey makes sure the client can write: it reuses a persisted key, or
 // prompts the user in Zotero and persists the key if they chose to remember it.
 func ensureLocalKey(ctx context.Context, c *zotero.Client) error {
+	// Fail before authorizing or writing if this Zotero build has no write API,
+	// so the user gets an actionable reason rather than an untrue "approve the
+	// prompt" line and a late, opaque 404. Runs even with a persisted key, since
+	// a stale key on a read-only build would otherwise reach the write and 404.
+	if err := c.RequireWriteCapability(ctx); err != nil {
+		return writeFriendly(err)
+	}
 	if c.HasLocalKey() {
 		return nil
 	}
@@ -318,6 +341,8 @@ func confirm(in io.Reader, w io.Writer, question string) bool {
 // writeFriendly turns the write-path sentinels into actionable messages.
 func writeFriendly(err error) error {
 	switch {
+	case errors.Is(err, zotero.ErrWriteUnsupported):
+		return err // its message is already the actionable reason
 	case errors.Is(err, zotero.ErrAuthorizeDenied):
 		return errors.New("authorization denied in Zotero")
 	case errors.Is(err, zotero.ErrWriteUnauthorized):

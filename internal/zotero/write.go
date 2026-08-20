@@ -111,6 +111,26 @@ func (c *Client) ensureServerID(ctx context.Context) error {
 	return err
 }
 
+// RequireWriteCapability confirms this endpoint can accept writes before the CLI
+// prompts, authorizes, or issues one. On the local endpoint the write API
+// announces itself with a Zotero-Server-ID header on every response
+// (zotero/zotero#5015); a single GET bootstraps it, and its absence means the
+// build predates writes. It returns ErrWriteUnsupported in that case, so a write
+// fails early with an actionable reason instead of a late, opaque 404. The web
+// endpoint has no such probe; its write grants are reported by doctor.
+func (c *Client) RequireWriteCapability(ctx context.Context) error {
+	if c.profile.Kind != EndpointLocal {
+		return nil
+	}
+	if err := c.ensureServerID(ctx); err != nil {
+		return err
+	}
+	if c.ServerID() == "" {
+		return ErrWriteUnsupported
+	}
+	return nil
+}
+
 // authorizeResponse is Zotero's reply to POST /api/local/authorize.
 type authorizeResponse struct {
 	Key      string `json:"key"`
