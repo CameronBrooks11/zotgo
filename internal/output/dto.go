@@ -49,9 +49,9 @@ type Item struct {
 	// NumChildren counts attachments and notes hanging off this item.
 	NumChildren int `json:"numChildren"`
 	// Children carries the attachments and notes themselves, but only where a
-	// command fetched them (`show`). Absent elsewhere, so that `kind: "item"`
-	// always denotes this one shape: a list omits it, a detail view fills it.
-	Children []Item `json:"children,omitempty"`
+	// command fetched them (`show`). A non-nil pointer distinguishes a fetched
+	// empty set from list/search rows, where the field is absent.
+	Children *[]Item `json:"children,omitempty"`
 }
 
 // ItemMutation is the outcome, or dry-run plan, for one item write request.
@@ -262,7 +262,8 @@ func NewItem(e zotero.Envelope) Item {
 // NewItemWithChildren flattens an item together with its attachments and notes.
 func NewItemWithChildren(item zotero.Envelope, children []zotero.Envelope) Item {
 	detail := NewItem(item)
-	detail.Children = NewItems(children)
+	items := NewItems(children)
+	detail.Children = &items
 	return detail
 }
 

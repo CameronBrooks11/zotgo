@@ -1,6 +1,7 @@
 package zotero
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -138,18 +139,40 @@ func (c *Client) Item(ctx context.Context, library LibraryRef, key string) (Enve
 // RawItem reads one complete item envelope, validating only the response shape
 // and requested identity while leaving every other Zotero-owned field untouched.
 func (c *Client) RawItem(ctx context.Context, library LibraryRef, key string) (json.RawMessage, error) {
-	body, _, err := c.do(ctx, c.profile.LibraryPrefix(library)+"/items/"+url.PathEscape(key), nil)
+	raw, _, err := c.rawItemPage(ctx, library, key)
+	return raw, err
+}
+
+// RawItemWithChildren reads one item and every direct child, honoring backoff
+// between the parent response and the first child request.
+func (c *Client) RawItemWithChildren(ctx context.Context, library LibraryRef, key string) (json.RawMessage, []json.RawMessage, error) {
+	item, page, err := c.rawItemPage(ctx, library, key)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	if err := c.honorBackoff(ctx, page); err != nil {
+		return nil, nil, err
+	}
+	children, err := c.allRawItemChildren(ctx, library, key)
+	if err != nil {
+		return nil, nil, err
+	}
+	return item, children, nil
+}
+
+func (c *Client) rawItemPage(ctx context.Context, library LibraryRef, key string) (json.RawMessage, Page, error) {
+	body, page, err := c.do(ctx, c.profile.LibraryPrefix(library)+"/items/"+url.PathEscape(key), nil)
+	if err != nil {
+		return nil, page, err
 	}
 	identity, err := DecodeItemIdentity(body)
 	if err != nil {
-		return nil, fmt.Errorf("decode item %q: %w", key, err)
+		return nil, page, fmt.Errorf("decode item %q: %w", key, err)
 	}
 	if identity.Key != key {
-		return nil, fmt.Errorf("decode item %q: response has key %q", key, identity.Key)
+		return nil, page, fmt.Errorf("decode item %q: response has key %q", key, identity.Key)
 	}
-	return json.RawMessage(body), nil
+	return json.RawMessage(body), page, nil
 }
 
 // Attachment reads and decodes one attachment's bounded metadata.
@@ -175,11 +198,74 @@ func (c *Client) Collection(ctx context.Context, library LibraryRef, key string)
 	return col, err
 }
 
-// ItemChildren reads attachments and notes under a parent item.
+// ItemChildren reads one page of attachments and notes under a parent item.
 func (c *Client) ItemChildren(ctx context.Context, library LibraryRef, key string) ([]Envelope, Page, error) {
 	var children []Envelope
 	page, err := c.getJSON(ctx, c.profile.LibraryPrefix(library)+"/items/"+url.PathEscape(key)+"/children", nil, &children)
 	return children, page, err
+}
+
+// allRawItemChildren follows pagination and preserves each complete child item
+// envelope without decoding Zotero-owned fields.
+func (c *Client) allRawItemChildren(ctx context.Context, library LibraryRef, key string) ([]json.RawMessage, error) {
+	var all []json.RawMessage
+	start := 0
+	for {
+		children, page, err := c.rawItemChildrenPage(ctx, library, key, start)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, children...)
+		next, more, err := nextStart(page.NextURL, start)
+		if err != nil {
+			return nil, err
+		}
+		if !more {
+			if all == nil {
+				all = []json.RawMessage{}
+			}
+			return all, nil
+		}
+		if err := c.honorBackoff(ctx, page); err != nil {
+			return nil, err
+		}
+		start = next
+	}
+}
+
+func (c *Client) rawItemChildrenPage(ctx context.Context, library LibraryRef, key string, start int) ([]json.RawMessage, Page, error) {
+	var values url.Values
+	if start > 0 {
+		values = url.Values{"start": {strconv.Itoa(start)}}
+	}
+	body, page, err := c.do(ctx, c.profile.LibraryPrefix(library)+"/items/"+url.PathEscape(key)+"/children", values)
+	if err != nil {
+		return nil, page, err
+	}
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) == 0 {
+		return nil, page, errors.New("decode child items: empty response body")
+	}
+	if trimmed[0] != '[' {
+		return nil, page, errors.New("decode child items: expected a JSON array")
+	}
+	var children []json.RawMessage
+	if err := json.Unmarshal(trimmed, &children); err != nil {
+		return nil, page, fmt.Errorf("decode child items: %w", err)
+	}
+	for i, child := range children {
+		identity, err := DecodeItemIdentity(child)
+		if err != nil {
+			return nil, page, fmt.Errorf("decode child item %d at start %d: %w", i, start, err)
+		}
+		if identity.Key == key {
+			return nil, page, fmt.Errorf("decode child item %d at start %d: response repeats parent key %q", i, start, key)
+		}
+	}
+	if children == nil {
+		children = []json.RawMessage{}
+	}
+	return children, page, nil
 }
 
 // Collections reads a single page of collections.

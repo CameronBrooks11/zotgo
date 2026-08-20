@@ -59,6 +59,19 @@ body.
 Non-dry-run machine writes require `--yes` with `--json` or `--jsonl`, so an
 automation command never falls back to an interactive prompt.
 
+### Show
+
+`zot --json show ITEM_KEY` and `--jsonl` emit one stable `item` document. The
+shaped item is `.data`; all of its shaped direct children are
+`.data.children`, in Zotero's page order.
+
+`zot --raw show ITEM_KEY` composes multiple Zotero responses as
+`{"item": <envelope>, "children": [<envelope>, ...]}`. The wrapper and array
+separators are synthesized by zotgo, while every embedded item envelope retains
+Zotero's fields and scalar representations. Raw `show` validates and buffers all
+pages before writing, so a malformed or failed later page produces no partial
+stdout.
+
 ### Attachments
 
 `zot --json attachment show ATTACHMENT_KEY` emits one `attachment` record.
@@ -101,6 +114,7 @@ zot --jsonl list | jq -r '.data | "\(.key)\t\(.title)"'
 
 `--raw` passes Zotero's API response straight through. It is an escape hatch for
 fields zotgo does not model, and it is **not covered by `schema`**: its shape is
-Zotero's and changes when Zotero changes. `stats`, `doctor`, and every write
-command (item, collection, and tag) reject `--raw`, because their output is
-derived and is not a raw Zotero response.
+Zotero's and changes when Zotero changes. Commands backed by multiple requests,
+such as `show`, may place complete Zotero envelopes inside a documented synthetic
+wrapper. `stats`, `doctor`, and every write command (item, collection, and tag)
+reject `--raw`, because their output is derived and is not a raw Zotero response.

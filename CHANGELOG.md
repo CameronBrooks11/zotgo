@@ -35,6 +35,9 @@ Planned and outstanding work is tracked in the
 - `zot item create` with no `--file` and no piped input no longer blocks
   silently waiting on the terminal; it explains that it needs `--file` or JSON
   on stdin.
+- `zot show KEY` now follows every child page. Its raw mode preserves each
+  complete item envelope inside the documented `{item, children}` composition
+  instead of re-encoding modeled fields.
 
 ## [0.8.0] - 2026-08-13
 

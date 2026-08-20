@@ -53,6 +53,23 @@ func TestNewItem_FlattensEnvelope(t *testing.T) {
 	}
 }
 
+func TestItemChildrenDistinguishNotFetchedFromEmpty(t *testing.T) {
+	row, err := json.Marshal(NewItem(itemEnvelope()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(row), `"children"`) {
+		t.Fatalf("list row contains children: %s", row)
+	}
+	detail, err := json.Marshal(NewItemWithChildren(itemEnvelope(), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(detail), `"children":[]`) {
+		t.Fatalf("empty detail children are not an array: %s", detail)
+	}
+}
+
 // Zotero stores a creator as first/last OR as a single name. Both survive.
 func TestNewItem_CreatorForms(t *testing.T) {
 	got := NewItem(itemEnvelope())
