@@ -65,7 +65,10 @@ automation command never falls back to an interactive prompt.
 Its bounded fields cover identity and parent, title and link mode, content and
 filename metadata, URL and dates, tags, nullable `md5`/`mtime`, and a nullable
 `enclosure`. JSONL emits the same record on one self-describing line. An
-enclosure is location and optional size metadata advertised by Zotero, not a
+enclosure carries the content type and optional size Zotero advertised for the
+file; its download href is endpoint-scoped (it differs between the Local and Web
+endpoints for the same attachment), so it is deliberately excluded from the
+stable record — reach for `--raw` when you need it. None of the enclosure is a
 portable filesystem-existence assertion.
 
 `--raw` emits Zotero's complete single-item envelope after validating only the

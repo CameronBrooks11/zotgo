@@ -37,6 +37,40 @@ func TestNewAttachment(t *testing.T) {
 	}
 }
 
+// The stable enclosure carries only portable fields. The download href is
+// endpoint-scoped (localhost under Local, api.zotero.org under --web for the
+// same attachment), so it stays out of the versioned record even when Zotero
+// advertised one; it remains reachable via --raw.
+func TestAttachmentEnclosureExcludesEndpointScopedHref(t *testing.T) {
+	length := int64(1234)
+	record := NewAttachment(zotero.Attachment{
+		Key:       "ATTACH01",
+		LinkMode:  "imported_file",
+		Enclosure: &zotero.AttachmentEnclosure{Href: "http://local/file", Type: "application/pdf", Title: "paper.pdf", Length: &length},
+	})
+	encoded, err := json.Marshal(record)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if strings.Contains(string(encoded), "href") || strings.Contains(string(encoded), "local/file") {
+		t.Fatalf("stable attachment DTO exposes an endpoint-scoped enclosure href: %s", encoded)
+	}
+	var doc struct {
+		Enclosure map[string]any `json:"enclosure"`
+	}
+	if err := json.Unmarshal(encoded, &doc); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	for _, field := range []string{"type", "title", "length"} {
+		if _, ok := doc.Enclosure[field]; !ok {
+			t.Errorf("enclosure omitted portable field %q: %s", field, encoded)
+		}
+	}
+	if len(doc.Enclosure) != 3 {
+		t.Errorf("enclosure fields = %v, want exactly type/title/length", doc.Enclosure)
+	}
+}
+
 func TestAttachmentStableBoundedFields(t *testing.T) {
 	record := NewAttachment(zotero.Attachment{Key: "ATTACH01", LinkMode: "linked_url"})
 	encoded, err := json.Marshal(record)

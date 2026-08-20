@@ -137,9 +137,13 @@ type Attachment struct {
 	Enclosure    *AttachmentEnclosure `json:"enclosure"`
 }
 
-// AttachmentEnclosure is the file location metadata Zotero advertised.
+// AttachmentEnclosure is the portable content-type and size metadata Zotero
+// advertised for an attachment. The download href is deliberately excluded from
+// the stable record: it is endpoint-scoped (the same attachment yields a
+// localhost URL under the Local API and an api.zotero.org URL under --web), so
+// it does not belong in a portable contract. Use --raw for Zotero's complete
+// envelope, which still carries the href.
 type AttachmentEnclosure struct {
-	Href   string `json:"href"`
 	Type   string `json:"type"`
 	Title  string `json:"title"`
 	Length *int64 `json:"length"`
@@ -280,7 +284,6 @@ func NewAttachment(attachment zotero.Attachment) Attachment {
 	var enclosure *AttachmentEnclosure
 	if attachment.Enclosure != nil {
 		enclosure = &AttachmentEnclosure{
-			Href:   attachment.Enclosure.Href,
 			Type:   attachment.Enclosure.Type,
 			Title:  attachment.Enclosure.Title,
 			Length: attachment.Enclosure.Length,
