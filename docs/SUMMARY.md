@@ -8,3 +8,7 @@
 - [Endpoints & profiles](profiles.md)
 - [Machine-readable output](machine-output.md)
 - [Zotero API reference](zotero-api.md)
+
+# Design
+
+- [Write authority for agents](design/write-authority.md)
