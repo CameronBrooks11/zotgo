@@ -10,12 +10,24 @@ zot list --tag ml --tag review # items with all the given tags
 zot search "state estimation"  # search by title/creator/year
 zot search algae --everything  # include full text and notes
 zot show HRAC4E44              # one item with its attachments and notes
+zot attachment show ABCD1234   # attachment metadata
 zot collections               # collections as a tree (--flat for a list)
 zot stats                     # library-wide counts
 ```
 
 Global flags: `--library`/`-L` selects a group library (by name or id; default is
 My Library), and `--url` overrides the endpoint address.
+
+## Attachments
+
+`zot attachment show ATTACHMENT_KEY` reports the attachment's parent, title,
+link mode, media and filename metadata, URL and dates, tags, nullable MD5/mtime,
+and any enclosure Zotero advertised. It reads one item envelope; it does not
+request file bytes, resolve a path, or open Zotero's database.
+
+An enclosure is location and optional size metadata advertised by Zotero, not a
+portable filesystem-existence check. Use `--raw` for Zotero's complete
+single-item envelope.
 
 ## Export
 
