@@ -1,9 +1,9 @@
 # Design: write authority for agents
 
-**Status:** Draft / RFC — under review. Not yet implemented.
+**Status:** Accepted / RFC — design settled, implementation not yet started.
 
-This document defines how zotgo should authorize writes, so that an autonomous
-agent can be given **bounded, time-limited, auditable** write access to a Zotero
+This document defines how zotgo authorizes writes, so that an autonomous agent
+can be given **bounded, time-limited, auditable** write access to a Zotero
 library instead of an all-or-nothing switch. It supersedes the earlier working
 rule of a hard "agents never write through this tool."
 
@@ -16,32 +16,60 @@ contact with real use:
 - Write features have landed (item/collection/tag writes, full-replace, and now
   managed-file upload). Each one silently widens what an agent *could* do if it
   is allowed to run zotgo at all.
-- The useful workflow the maintainer actually wants is: *"let this agent work on
-  this project for the next 30 minutes."* A blanket allow makes the blast radius
-  the **entire library**; a blanket deny makes the agent useless for the task.
+- The useful workflow the maintainer actually wants is: *"let this agent work
+  for the next 30 minutes."* A blanket allow makes the blast radius the **entire
+  library**; a blanket deny makes the agent useless for the task.
 
 The goal is a middle path with a **contained blast radius**: a human grants a
 narrow, expiring capability; the agent operates inside it; and afterwards the
 human can see exactly what was — or could have been — touched, instead of asking
 "do I need to restore my whole Zotero from backup?"
 
+## What this is (and what it is not)
+
+Be precise about the threat model, because it determines what the lease can
+honestly promise.
+
+The lease is a **guardrail that contains a rule-following agent** — one that acts
+only by invoking `zot` subcommands and honors the tool's refusals. For that
+agent, the lease bounds scope, expires automatically, and records what happened.
+That is the real, useful property: it contains **accidental** blast radius and
+gives the human an audit trail and a knowable maximum reach.
+
+The lease is **not a forgery-resistant authorization boundary** against a capable
+or malicious same-user process. On a single-user host the agent *is* the user: it
+can write the lease file directly, read any credential zotgo stores, or POST to
+Zotero's local API without going through zotgo at all. This is **inherent to the
+threat model, not a defect to be fixed with cryptography** — a signing key would
+live in the same directory the attacker already controls (see [Q1](#q1-lease-integrity)).
+The doc therefore never claims the lease "cannot be forged" or that "an agent
+cannot mint its own lease"; it claims the lease contains an agent that plays by
+the rules.
+
 ### Goals
 
-1. A **human**, not an agent, decides when write access is granted.
-2. Each grant is **scoped** (which libraries/collections, which operations).
-3. Each grant is **time-boxed** (expires automatically).
-4. Every write is **audited**, and the potential blast radius is knowable up
-   front.
-5. Writes **fail closed**: absent or expired authority means no write, with an
-   actionable message (building on the fail-fast work in #42).
+1. A **human**, not an agent, mints a lease through an interactive step an agent
+   cannot perform non-interactively.
+2. Each grant is **scoped** — which library, which operations. (Sub-library
+   *collection* scope is deferred; see [Q2](#q2-collection-scope-deferred).)
+3. Each grant is **time-boxed** and expires automatically; there is no
+   unexpiring lease.
+4. Every write — and every refusal — is **audited**, and the potential blast
+   radius is knowable before granting.
+5. Writes **fail closed**: absent, expired, unreadable, or out-of-scope authority
+   means no write, with an actionable, dimension-specific message (building on the
+   fail-fast work in #42).
 
 ### Non-goals
 
 - Multi-user / server authz. zotgo is a single-user local tool.
-- Protecting against a fully compromised host. If an attacker already runs code
-  as the user, no in-process boundary saves them; this raises the bar and
-  contains *accidental* agent blast radius, it is not a sandbox.
-- Replacing Zotero's own permissions where those are real (see below).
+- Protecting against a fully compromised host or a malicious same-user process.
+  If an attacker already runs code as the user, no in-process boundary saves
+  them. This raises the bar against *accidents*; it is not a sandbox.
+- Replacing Zotero's own permissions where those are real (see `--web` below).
+- Tamper-resistant auditing. The audit log is a same-user-writable file: a
+  convenience record for a well-behaved agent and forensics after an accident,
+  not a trail that survives a hostile process.
 
 ## Research: what Zotero can and cannot enforce
 
@@ -54,7 +82,7 @@ more robust than one the client promises.
 | Time-box / TTL on access | **No** — keys are valid indefinitely unless manually revoked | **No** — local key is single-use or persistent ("Always Allow") |
 | Scope below a library (per collection/project) | **No** — per-library/group only | **No** — grants full local write |
 | Mint a key programmatically | Only via a registered **OAuth** app + user handshake | Via the desktop **authorize modal** (a human approves) |
-| Revoke a key programmatically | **Yes** — `DELETE /keys/<key>` | n/a |
+| Revoke a key programmatically | **Yes** — `DELETE /keys/<key>` | n/a (no local revoke API) |
 
 Sources: Zotero Web API v3 docs — [basics](https://www.zotero.org/support/dev/web_api/v3/basics)
 (key permissions, `DELETE` revocation, "valid indefinitely, unless revoked"),
@@ -70,34 +98,40 @@ authorization therefore **cannot be the primary mechanism**.
 ## Decision: enforce in the zotgo layer, harden with Zotero, harness as a belt
 
 The write-authority boundary lives in **zotgo** as a *write lease* the tool
-checks before every write. This is chosen over Zotero-side enforcement because,
-per the research above, Zotero cannot express TTL or fine scope; and over the
-harness layer as *primary* because a boundary tied to one agent runtime does not
-protect the tool when driven another way.
+checks before every non-interactive write. This is chosen over Zotero-side
+enforcement because, per the research above, Zotero cannot express TTL or fine
+scope; and over the harness layer as *primary* because a boundary tied to one
+agent runtime does not protect the tool when driven another way.
 
 The other layers still contribute, in their proper role:
 
-- **Zotero-side (defense in depth):** for `--web` writes, require — and where an
-  OAuth app is configured, mint and later `DELETE`-revoke — a **library-scoped
-  write key**, so even a lease bug cannot write outside the granted library.
-  This is real, server-enforced hardening; it just cannot stand alone.
-- **Harness (optional belt):** an agent-config deny-rule on the grant command,
-  so an agent literally cannot mint its own lease. Useful, but not relied upon —
-  the tool must fail closed even if the harness is misconfigured.
+- **Zotero-side (defense in depth, `--web` only):** for `--web` writes, require a
+  **library-scoped write key** and verify its grants are a subset of the lease's
+  library scope (see [Q4](#q4-web-without-oauth)), so even a lease bug cannot
+  write outside the granted library. This is real, server-enforced hardening; it
+  applies only to `--web`, does not enforce TTL or sub-library scope, and does not
+  apply to the local endpoint at all.
+- **Harness (optional belt):** an agent-config deny-rule on `zot grant`, so an
+  agent literally cannot mint its own lease. Useful, but not relied upon — the
+  tool must fail closed even if the harness is misconfigured.
 
 ```
-        human ──mints──▶  write lease (scope + ops + expiry + audit)
-                              │
-   agent ──runs `zot …`──▶ zotgo ──checks lease──▶ Zotero write
-                              │                        ▲
-                              └─ no/expired/out-of-scope lease ⇒ refuse
-   (--web only) lease scope ⊆ Zotero library-scoped key  ────────┘ (server-enforced)
+   human ──approves modal──▶ zot grant ──mints──▶ write lease
+                                                  (scope + ops + expiry + audit
+                                                   + bound write key)
+                                                        │
+  agent ──runs `zot … --yes`──▶ zotgo ──authorizer at writeRequest──▶ Zotero write
+                                          │                              ▲
+                                          └─ no/expired/out-of-scope ⇒ refuse (fail closed)
+   (--web only) lease library scope ⊇ Zotero key grants  ──────────────┘ (server-enforced)
 ```
 
 ## The write lease
 
-A lease is a small local record (path under the existing config dir,
-`~/.config/zotgo/`, `0600`; overridable with `ZOTGO_CONFIG_DIR`). Proposed shape:
+A lease is a small local record — a `0600` file under the existing config dir
+(`~/.config/zotgo/`, itself `0700`; overridable with `ZOTGO_CONFIG_DIR`), written
+with the same discipline as `cmd/zot/keystore.go`. There is **one active lease at
+a time**. Shape:
 
 ```json
 {
@@ -105,74 +139,254 @@ A lease is a small local record (path under the existing config dir,
   "created": "2026-08-20T15:00:00Z",
   "expires": "2026-08-20T15:30:00Z",
   "scope": {
-    "libraries": ["user:0"],
-    "collections": ["ABCD1234"],
+    "libraries": ["user:8784047"],
     "operations": ["item.create", "item.patch", "attachment.import"]
   },
-  "audit": "~/.config/zotgo/audit/lease_....jsonl",
-  "note": "schmidma PBR project cleanup"
+  "writeKey": "<local write key, bound to this lease>",
+  "note": "PBR project cleanup"
 }
 ```
 
-- **Minting — `zot grant` (human-only).** Prints exactly what it will authorize,
-  then requires human confirmation. For the local endpoint the root of trust is
-  Zotero's own **authorize modal** (an agent cannot click it); `zot grant` ties
-  the lease to a successful authorize. A non-TTY / `--yes` invocation is refused
-  for granting (the opposite of a normal command), so an agent cannot mint one
-  non-interactively. The harness deny-rule is the additional belt.
-- **Checking.** Every write command resolves the active lease and refuses unless
-  it is present, unexpired, and the requested `(library, collection, operation)`
-  is in scope. This composes with the existing `RequireWriteCapability` fail-fast
-  (#42): capability first, then authority.
-- **Audit &amp; blast radius.** Every write appends to the lease's audit log
-  (operation, target keys, outcome). `--dry-run` already previews a write
-  without performing it; combined with the lease scope, the human can see the
-  *maximum* possible blast radius before granting, and the *actual* changes
-  after.
-- **Expiry &amp; revocation.** A lease past `expires` is dead — writes refuse and
-  point at `zot grant`. `zot grant --revoke` ends it early. For `--web` with an
-  OAuth-minted key, revocation also `DELETE`s the Zotero key.
+- `scope.libraries` uses the **canonical** library form (kind + real numeric id),
+  resolved once at mint time — never the `user:0` sentinel, which the Local API
+  accepts on input but never reports back (see [Q6](#q6-canonical-library-identity)).
+- `scope.operations` is a **closed, per-command vocabulary** (see [Q3](#q3-operation-vocabulary)).
+- `writeKey` binds the credential *into* the lease (see [Bound key](#bound-write-key)),
+  so expiry and revocation actually remove write ability.
+- `scope.collections` is intentionally **absent in phase 1** (deferred, [Q2](#q2-collection-scope-deferred));
+  the field is reserved so adding real collection enforcement later is non-breaking.
+- The audit path is **derived from `id`** (`~/.config/zotgo/audit/<id>.jsonl`),
+  not stored separately.
+
+### Minting — `zot grant` (human-only)
+
+`zot grant` is the only command that creates a lease, and it is deliberately the
+**inverse** of every other write command:
+
+- It **requires a TTY** and refuses `--yes` / non-interactive invocation. An
+  agent cannot mint a lease non-interactively; the harness deny-rule is an
+  additional belt. (The refusal message says *why* — minting needs a human to
+  approve Zotero's authorize modal in an interactive terminal — and states
+  explicitly that `--yes` cannot substitute here, so the reflex from other
+  commands does not hit a bare wall.)
+- The root of trust at mint time is **Zotero's own authorize modal** (local) — a
+  desktop GUI a human must click; `zot grant` ties the lease to a successful
+  authorize and stores the resulting key *in the lease*.
+- It takes **`--ttl`** (e.g. `--ttl 30m`) with a bounded default (30m) and a
+  documented maximum. There is no unexpiring lease.
+- Before confirming, it **prints the concrete authorization** — resolved library,
+  operations, and the count of items currently in scope — as the pre-grant
+  blast-radius picture. (`--dry-run` remains the after-the-fact per-write preview;
+  blast radius "before granting" cannot rely on it because it is a property of the
+  write commands, not of `grant`.)
+- Minting while a live lease exists **warns and replaces only on explicit
+  confirmation**, so an agent's authority is never silently clobbered.
+
+Surface: `zot grant`, `zot grant status`, `zot grant revoke` (noun-verb
+subcommands matching `item create` / `collection rename`; no `--revoke`/`--status`
+flag-verbs).
+
+### Checking — a deny-by-default authorizer at the write chokepoint
+
+Enforcement lives in **`internal/zotero` at the single `writeRequest`
+chokepoint**, not sprinkled across the eleven `cmd/` write actions. The `Client`
+holds a `WriteAuthorizer` interface; a **nil authorizer denies**. `cmd/zot`
+injects an implementation that reads the lease file (keeping file/CLI logic out
+of the dependency-light client). Every write funnels through `writeRequest`, so a
+new or forgotten write path (the reason #52 had to be held) is structurally
+unable to skip the check.
+
+The write methods thread a `(library, operation)` scope descriptor to
+`writeRequest`. Ordering composes with the existing fail-fast layering:
+`RequireWriteCapability` (capability) first, then the lease (authority).
+
+**Interactive human writes do not require a lease.** A human at a TTY who answers
+the existing `confirm()` prompt is their own authority. The lease is required only
+for **non-interactive / `--yes` / machine-mode** writes — the case where a human
+is *not* present. This maps the lease precisely to its purpose and avoids a
+friction regression (and lockout footgun) on the maintainer's own manual edits.
+
+### <a id="bound-write-key"></a>Bound write key — writes never self-authorize
+
+When leases are in force, zotgo does **not** persist a standalone "Always Allow"
+key. The local write key lives **inside the lease record**, and write commands
+**never trigger `Client.Authorize`** — only `zot grant` does. Consequences:
+
+- A forged or hand-written lease carries no valid key, so the write `401`s /
+  refuses even though the file exists.
+- Expiry and `zot grant revoke` actually remove write ability, instead of leaving
+  a broader, longer-lived Zotero credential behind that a re-forged lease could
+  replay.
+
+This is the single change that gives the authority layer real teeth against an
+*accidental* same-user agent, and it closes the "Always Allow" replay hole
+([Q5](#q5-always-allow)). Residual honesty: a process can still POST to Zotero's
+local API directly, and Zotero has no local API to forget an "Always Allow" key,
+so `zot grant revoke` removes zotgo-side state only — documented as a limitation
+in `writing.md`.
+
+### Fail-closed, with dimension-specific messages
+
+Any lease that is missing, unreadable, malformed, expired, or out-of-scope
+**denies** the write (a parse error never defaults to allow). Each refusal
+dimension gets a distinct sentinel and message, wired through `writeFriendly`
+alongside the existing `ErrWrite*` sentinels:
+
+| Condition | Message shape |
+|---|---|
+| No lease | `no active write lease; run 'zot grant' to authorize writes` |
+| Expired | `write lease expired at <ts>; run 'zot grant' to renew` |
+| Wrong operation | `lease does not permit item.delete; re-grant with that operation` |
+| Wrong library | names the target library vs the granted one |
+
+Dimension-specific errors are what let an agent report *which* boundary it hit so
+a human can re-scope.
+
+### Audit — successes and refusals, with a read path
+
+Every write **and** every refused/out-of-scope/expired attempt appends to the
+lease's audit log (operation, target keys, outcome); `--dry-run` does not pollute
+it (or is marked `planned`). Recording refusals matters because a burst of them
+is exactly the signal a worried maintainer wants. The audit is *usable*, not just
+present:
+
+- `zot grant status` prints the active lease, its expiry, the audit path, and a
+  summary (N created / M patched / K deleted / R refused).
+- `zot grant log` renders the JSONL through the existing human/`--json` output
+  machinery.
+
+The audit file is same-user-writable, so it is a convenience/forensics record,
+not a tamper-resistant trail — stated plainly so it is not oversold.
 
 ## How existing and pending write commands conform
 
 - `item create` / `patch` / `replace` / `delete`, `collection create` / `rename`
-  / `move` / `delete`, `tag add` / `remove` / `delete` — each gains the lease
-  check alongside its current `--yes` confirmation and capability probe. Their
-  operation identifiers map to the `scope.operations` vocabulary.
+  / `move` / `delete`, `tag add` / `remove` / `delete` — each gets the centralized
+  authorizer check (nothing per-command to add beyond threading the operation id).
+  Their operation identifiers are the closed vocabulary in [Q3](#q3-operation-vocabulary).
 - **#52 `attachment import`** — the pending managed-file upload. Its code is
   already reviewed clean (credential/redirect boundaries and staging TOCTOU
   defenses verified); it is held only until it can require an
-  `attachment.import`-scoped lease. This is expected to be a small addition, not
-  a rewrite.
+  `attachment.import`-scoped lease. Once the authorizer lands at `writeRequest`,
+  #52 conforms by adding one operation identifier to the vocabulary — not a
+  rewrite.
 
-## Open questions
+## Resolved questions
 
-1. **Lease integrity.** Does the lease need to be signed/HMAC'd, or is a
-   `0600` file under the config dir sufficient given the single-user threat
-   model? (Leaning: file perms are enough; signing adds little against a
-   same-user attacker.)
-2. **Collection scope semantics.** Zotero writes are not collection-scoped
-   server-side. zotgo can enforce "only items in collection X" for `patch`/
-   `delete` by pre-checking membership, but `create` places items *into* a
-   collection. Define per-operation scope meaning precisely.
-3. **Granularity of the operation vocabulary** — per-command (`item.patch`) vs
-   per-class (`item.write`). Leaning per-command for tighter least-privilege.
-4. **`--web` without an OAuth app.** If no OAuth app is registered, do we require
-   the user to supply an already-library-scoped key and merely *verify* its
-   grants (via the existing capability probe), rather than minting one?
-5. **Interaction with "Always Allow".** The persisted local key already removes
-   the modal on later writes; the lease becomes the thing that expires, so the
-   modal is the mint-time gate, the lease is the runtime gate.
+### <a id="q1-lease-integrity"></a>Q1 — Lease integrity: **no signing**
 
-## Phased rollout (proposed)
+Do **not** sign/HMAC the lease. A `0600` file under the `0700` config dir is the
+whole mechanism; trust is anchored in Zotero's authorize modal at mint time. A
+same-user agent can read any signing key that lives beside the lease, so a
+signature adds zero forgery-resistance under the stated threat model. Permissions
+are set on **write** (as `keystore.go` already does); on **read**, the tool
+parses against the schema, requires a valid unexpired `expires`, verifies scope,
+and fails closed on anything malformed. It does **not** add strict read-side gates
+(owner check, exactly-`0600`, parent-dir mode) — those harden a declared non-goal,
+are inconsistent with the unguarded key sitting in the same dir, and risk false
+lockouts on benign umask/backup/network-FS states.
 
-1. **Lease core:** `zot grant` (mint/-\-revoke/-\-status), lease file, the
-   `requireLease` check wired into all existing writes. Fail-closed + audit.
-2. **#52 conforms:** add the `attachment.import` scope check; unblock and merge.
-3. **`--web` hardening:** verify/mint library-scoped keys; optional OAuth
-   mint+revoke.
-4. **Docs + harness belt:** document the model in `writing.md`; add the agent
-   deny-rule guidance.
+### <a id="q2-collection-scope-deferred"></a>Q2 — Collection scope: **deferred to library-level**
+
+Phase 1 enforces **library-level scope only**. Zotero enforces nothing below a
+library server-side, so collection scope would be client-only (TOCTOU-adjacent,
+no backstop) with genuinely ambiguous create-into-collection and subtree
+semantics, and `tag.delete` cannot be bounded below a library at all. For a
+single user — typically one user library — library scope + a 30-minute TTL +
+audit already delivers a contained blast radius; collection scope is the largest
+bug surface for the least marginal safety. `scope.collections` is reserved in the
+JSON as an accepted-but-unenforced field so real enforcement is a non-breaking
+add later.
+
+**If collection scope is added later**, the membership rule **must** be the
+two-sided freeze invariant `pre\scope == post\scope` for any membership-changing
+write — **not** `post ⊆ pre ∪ scope`, which still permits silently stripping an
+item out of an out-of-scope collection (the `write.go` clearing path — data loss).
+Parented creates and `attachment.import` must resolve the parent item's
+collections (a read) to determine destination scope, because child items inherit
+membership and carry an empty `data.collections`. Recorded here so it is not
+re-litigated.
+
+### <a id="q3-operation-vocabulary"></a>Q3 — Operation vocabulary: **per-command, closed, fail-closed on unmapped**
+
+`scope.operations` is a closed, per-command vocabulary that exactly matches the
+write command surface and reuses the `Operation` labels the code already emits:
+
+```
+item.create  item.patch  item.replace  item.delete
+collection.create  collection.rename  collection.move  collection.delete
+tag.add  tag.remove  tag.delete
+attachment.import
+```
+
+Any write whose operation id is absent from `scope.operations` **refuses**
+(default-deny, including future unwired commands). Per-command is vindicated by
+`item.replace` (destructive full overwrite, must be separable from `patch`) and
+`tag.delete` (library-wide, must be separable from per-item `tag.remove`) —
+distinctions a per-class `item.write` would collapse. The common "clean up
+metadata" grant is therefore verbose; wildcards/presets are deferred as purely
+additive sugar.
+
+### <a id="q4-web-without-oauth"></a>Q4 — `--web` without OAuth: **verify-only**
+
+For `--web`, require the user to supply an already-library-scoped Web API key and
+merely **verify** its grants; do **not** build OAuth mint/revoke (OAuth 1.0a is
+hundreds of fiddly, dependency-tempting lines for a defense-in-depth layer on a
+path that is not the driving use case — YAGNI). Verify-only cannot manufacture
+authority and matches Zotero's real per-library capability; TTL still comes from
+the lease. Enforce `key_write_libraries ⊆ lease.scope.libraries` (subset, not
+equality); walk `Access.User` and `Access.Groups` (including the special `all`
+entry) rather than reusing the boolean `grantsWrite()`; normalize `user:0` vs
+`user:<realid>` and **fail closed on any unmappable library identity**. zotgo
+never `DELETE`s a user-supplied key it did not mint.
+
+Note: the CLI has **no `--web` write path today** (writes are local-only). Phase 3
+is therefore "build `--web` writes, then verify," and `RequireWriteCapability`
+currently returns nil for the web endpoint — real, modest work, scoped as its own
+phase.
+
+### <a id="q5-always-allow"></a>Q5 — "Always Allow": **modal is the mint gate, lease is the runtime gate**
+
+Zotero's authorize modal is the **mint-time** gate (enforced by `zot grant`'s
+TTY-required / `--yes`-refused confirmation); the lease is the **runtime** gate
+(expiry + scope). Binding the key into the lease and never re-authorizing on the
+write path (above) means a persisted "Always Allow" grant cannot be replayed by a
+forged lease. The premise that "Always Allow" suppresses the modal on later
+authorizes is **provisional** — `docs/zotero-api.md` documents single-use only for
+plain "Allow" — and is marked pending live verification; the conclusion holds
+either way, since a silent re-authorize would equally defeat a per-write modal.
+
+### <a id="q6-canonical-library-identity"></a>Q6 — Canonical library identity
+
+Pin one canonical library form (`LibraryRef.Kind` + real numeric id, resolved
+once) for both the lease record and the runtime check. The Local API accepts the
+`user:0` sentinel on input but reports the real id, and groups use real ids; a
+lease keyed on `user:0` that fails to match the resolved id is a silent
+fail-open/lockout — the #1 correctness risk called out in `docs/zotero-api.md`.
+Covered by a table test using both the `0` sentinel and the real id.
+
+## Phased rollout
+
+1. **Lease core.** The `0600` single-lease file (id, created, expires, library
+   scope, per-command operations, bound write key, note); `zot grant` /
+   `grant status` / `grant revoke`, TTY-gated and tied to a successful Zotero
+   authorize, with `--ttl` (30m default, documented max) and a printed pre-grant
+   blast radius; a deny-by-default `WriteAuthorizer` injected into the `Client`
+   and enforced at `writeRequest`, applied **only** to non-interactive/`--yes`/
+   machine writes; per-command operation scope with fail-closed on any unmapped
+   op; canonical library-identity matching with a `user:0`-vs-real-id table test;
+   dimension-specific refusal sentinels; and an append-only JSONL audit that
+   records successes **and** refusals, surfaced by `grant status` / `grant log`.
+2. **#52 conforms.** Add `attachment.import` to the vocabulary; unblock and merge.
+3. **`--web` hardening.** Build the `--web` write path, then verify a
+   user-supplied library-scoped key (subset check, fail-closed on unmappable
+   identity). OAuth mint/revoke is **not** in scope — deferred indefinitely until
+   a concrete demand justifies the code.
+4. **Docs + harness belt.** Document the model (including the honest limitations
+   and the local-key residual) in `writing.md`; add the agent deny-rule guidance.
 
 Each phase is independently shippable and CI-gated, per the project's small-PR
-convention.
+convention. The lease logic is unit-testable against fakes now, but per the
+project's iron rule the **release tag** gates on a live run against a Zotero built
+with the merged write API (zotero/zotero#5015): the authorize/key/precondition
+interplay the lease wraps is not yet verifiable live.
