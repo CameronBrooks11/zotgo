@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -45,6 +47,14 @@ type ItemIdentity struct {
 	ItemType string
 }
 
+// Relation is one outgoing predicate/target edge from an item. Target remains
+// authoritative; TargetKey is only a convenience for strict Zotero item URIs.
+type Relation struct {
+	Predicate string
+	Target    string
+	TargetKey string
+}
+
 // DecodeItemIdentity validates only an item's envelope shape and identity. It
 // deliberately leaves every other Zotero-owned field untouched.
 func DecodeItemIdentity(raw json.RawMessage) (ItemIdentity, error) {
@@ -82,6 +92,121 @@ func RequireItemType(raw json.RawMessage, want string) error {
 		return fmt.Errorf("item %s has type %q, not %s", identity.Key, identity.ItemType, want)
 	}
 	return nil
+}
+
+// DecodeRelations returns outgoing relations in stable predicate/target order.
+// Zotero reads use arrays, while its write API also documents one string value.
+func DecodeRelations(raw json.RawMessage) ([]Relation, error) {
+	if _, err := DecodeItemIdentity(raw); err != nil {
+		return nil, err
+	}
+	var item struct {
+		Data struct {
+			Relations json.RawMessage `json:"relations"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &item); err != nil {
+		return nil, err
+	}
+	trimmed := bytes.TrimSpace(item.Data.Relations)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return []Relation{}, nil
+	}
+	if trimmed[0] != '{' {
+		return nil, errors.New("relations must be a JSON object")
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &fields); err != nil {
+		return nil, err
+	}
+	relations := make([]Relation, 0)
+	for predicate, rawTargets := range fields {
+		targets, err := relationTargets(rawTargets)
+		if err != nil {
+			return nil, fmt.Errorf("relation %q: %w", predicate, err)
+		}
+		for _, target := range targets {
+			if target == "" {
+				return nil, fmt.Errorf("relation %q: target must not be empty", predicate)
+			}
+			relations = append(relations, Relation{
+				Predicate: predicate,
+				Target:    target,
+				TargetKey: relationTargetKey(target),
+			})
+		}
+	}
+	sort.SliceStable(relations, func(i, j int) bool {
+		if relations[i].Predicate == relations[j].Predicate {
+			return relations[i].Target < relations[j].Target
+		}
+		return relations[i].Predicate < relations[j].Predicate
+	})
+	return relations, nil
+}
+
+func relationTargets(raw json.RawMessage) ([]string, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return nil, errors.New("target is empty JSON")
+	}
+	switch trimmed[0] {
+	case '"':
+		var target string
+		if err := json.Unmarshal(trimmed, &target); err != nil {
+			return nil, err
+		}
+		return []string{target}, nil
+	case '[':
+		var targets []string
+		if err := json.Unmarshal(trimmed, &targets); err != nil {
+			return nil, err
+		}
+		return targets, nil
+	default:
+		return nil, errors.New("target must be a string or array of strings")
+	}
+}
+
+func relationTargetKey(target string) string {
+	u, err := url.Parse(target)
+	if err != nil || u.Opaque != "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return ""
+	}
+	if !strings.EqualFold(u.Scheme, "http") && !strings.EqualFold(u.Scheme, "https") {
+		return ""
+	}
+	if !strings.EqualFold(u.Host, "zotero.org") && !strings.EqualFold(u.Host, "www.zotero.org") {
+		return ""
+	}
+	escapedPath := u.EscapedPath()
+	if !strings.HasPrefix(escapedPath, "/") || escapedPath == "/" || strings.HasSuffix(escapedPath, "/") {
+		return ""
+	}
+	escapedParts := strings.Split(strings.TrimPrefix(escapedPath, "/"), "/")
+	parts := make([]string, len(escapedParts))
+	for i, part := range escapedParts {
+		decoded, err := url.PathUnescape(part)
+		if err != nil || decoded == "" || strings.Contains(decoded, "/") {
+			return ""
+		}
+		parts[i] = decoded
+	}
+	var key string
+	switch {
+	case len(parts) == 4 && parts[0] == "users" && positiveDecimal(parts[1]) && parts[2] == "items":
+		key = parts[3]
+	case len(parts) == 4 && parts[0] == "groups" && positiveDecimal(parts[1]) && parts[2] == "items":
+		key = parts[3]
+	case len(parts) == 5 && parts[0] == "users" && parts[1] == "local" && parts[2] != "" && parts[3] == "items":
+		key = parts[4]
+	}
+	return key
+}
+
+func positiveDecimal(value string) bool {
+	n, err := strconv.ParseInt(value, 10, 64)
+	return err == nil && n > 0 && strconv.FormatInt(n, 10) == value
 }
 
 func (e *Envelope) UnmarshalJSON(data []byte) error {

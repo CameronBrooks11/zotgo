@@ -10,6 +10,7 @@ package zotero
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 )
@@ -73,6 +74,50 @@ func TestLiveGroupResolutionAndReads(t *testing.T) {
 		}
 	}
 	t.Logf("group %q (id %d): %d items total", g.Data.Name, g.ID, page.TotalResults)
+}
+
+func TestLiveRelationsMatchItemData(t *testing.T) {
+	client := liveClient(t)
+	ctx := context.Background()
+	items, _, err := client.Items(ctx, UserLibrary(), ItemsOptions{Limit: 100})
+	if err != nil {
+		t.Fatalf("Items: %v", err)
+	}
+	for _, item := range items {
+		var data struct {
+			Relations map[string]json.RawMessage `json:"relations"`
+		}
+		if err := json.Unmarshal(item.Data, &data); err != nil || len(data.Relations) == 0 {
+			continue
+		}
+		raw, err := client.RawItem(ctx, UserLibrary(), item.Key)
+		if err != nil {
+			t.Fatalf("RawItem(%s): %v", item.Key, err)
+		}
+		relations, err := DecodeRelations(raw)
+		if err != nil {
+			t.Fatalf("DecodeRelations(%s): %v", item.Key, err)
+		}
+		want := 0
+		for predicate, rawTargets := range data.Relations {
+			var targets []string
+			if err := json.Unmarshal(rawTargets, &targets); err != nil {
+				t.Fatalf("item %s relation %q is not an array of strings: %v", item.Key, predicate, err)
+			}
+			want += len(targets)
+		}
+		if len(relations) != want {
+			t.Fatalf("item %s: decoded %d relations, want %d from item data", item.Key, len(relations), want)
+		}
+		for _, relation := range relations {
+			if relation.Predicate == "" || relation.Target == "" {
+				t.Fatalf("item %s: incomplete relation: %#v", item.Key, relation)
+			}
+		}
+		t.Logf("item %s: checked %d outgoing relations", item.Key, len(relations))
+		return
+	}
+	t.Skip("no relations in the first 100 user-library items")
 }
 
 func TestLiveNotFound(t *testing.T) {

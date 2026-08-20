@@ -51,6 +51,20 @@ func Note(w io.Writer, note zotero.Note) {
 	fmt.Fprintln(w, note.HTML)
 }
 
+// Relations writes one item's outgoing relation edges.
+func Relations(w io.Writer, itemKey string, relations []zotero.Relation) {
+	if len(relations) == 0 {
+		fmt.Fprintf(w, "No relations for %s.\n", itemKey)
+		return
+	}
+	tw := newTable(w)
+	fmt.Fprintln(tw, "PREDICATE\tTARGET KEY\tTARGET")
+	for _, relation := range relations {
+		fmt.Fprintf(tw, "%s\t%s\t%s\n", relation.Predicate, relation.TargetKey, relation.Target)
+	}
+	tw.Flush()
+}
+
 // Attachment writes one attachment's metadata.
 func Attachment(w io.Writer, attachment zotero.Attachment) {
 	tw := newTable(w)
