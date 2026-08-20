@@ -58,6 +58,7 @@ func TestResolveCollectionPathsRejectsInvalidGraphs(t *testing.T) {
 		{name: "missing requested", keys: []string{"LOST0001"}, want: `no collection with key "LOST0001"`},
 		{name: "missing parent", collections: []Envelope{pathCollection("LEAF0001", "Leaf", `"LOST0001"`)}, keys: []string{"LEAF0001"}, want: `references missing parent "LOST0001"`},
 		{name: "cycle", collections: []Envelope{pathCollection("ONE00001", "One", `"TWO00002"`), pathCollection("TWO00002", "Two", `"ONE00001"`)}, keys: []string{"ONE00001"}, want: `cycle at "ONE00001"`},
+		{name: "self parent", collections: []Envelope{pathCollection("SELF0001", "Self", `"SELF0001"`)}, keys: []string{"SELF0001"}, want: `cycle at "SELF0001"`},
 		{name: "missing data", collections: []Envelope{{Key: "NODATA01"}}, keys: []string{"NODATA01"}, want: "expected a data object"},
 		{name: "null data", collections: []Envelope{{Key: "NULLDATA", Data: json.RawMessage(`null`)}}, keys: []string{"NULLDATA"}, want: "expected a data object"},
 		{name: "malformed data", collections: []Envelope{{Key: "BADJSON1", Data: json.RawMessage(`{`)}}, keys: []string{"BADJSON1"}, want: `decode collection "BADJSON1"`},
