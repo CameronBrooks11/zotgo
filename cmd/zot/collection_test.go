@@ -185,6 +185,7 @@ func TestCollectionCreateResultsRejectsInvalidOutcomes(t *testing.T) {
 }
 
 func TestCollectionRenameMachine(t *testing.T) {
+	seedWriteLease(t)
 	fake := &collectionWriteFake{}
 	srv := newCollectionWriteFake(t, fake)
 	defer srv.Close()
@@ -210,6 +211,7 @@ func TestCollectionRenameMachine(t *testing.T) {
 }
 
 func TestCollectionMoveMachine(t *testing.T) {
+	seedWriteLease(t)
 	fake := &collectionWriteFake{}
 	srv := newCollectionWriteFake(t, fake)
 	defer srv.Close()
@@ -253,6 +255,7 @@ func TestCollectionMoveRejectsBadDestination(t *testing.T) {
 }
 
 func TestCollectionDeleteMachineNotFoundOrdering(t *testing.T) {
+	seedWriteLease(t)
 	fake := &collectionWriteFake{}
 	srv := newCollectionWriteFake(t, fake)
 	defer srv.Close()

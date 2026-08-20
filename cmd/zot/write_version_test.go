@@ -53,9 +53,9 @@ func TestSingleObjectWritesUseObjectVersion(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			configDir := t.TempDir()
 			t.Setenv("ZOTGO_CONFIG_DIR", configDir)
-			if err := saveLocalKey("test-local-key"); err != nil {
-				t.Fatalf("save local key: %v", err)
-			}
+			// A non-interactive write draws its key from the active lease, not a
+			// standalone persisted key; seedWriteLease binds "TEST-KEY".
+			seedWriteLease(t)
 
 			var libraryVersionRequests atomic.Int32
 			var gotVersion string
@@ -69,8 +69,8 @@ func TestSingleObjectWritesUseObjectVersion(t *testing.T) {
 					w.Header().Set("Last-Modified-Version", "99")
 					_, _ = w.Write([]byte(`[]`))
 				case r.Method == http.MethodPatch && r.URL.Path == test.objectPath:
-					if key := r.Header.Get("Zotero-API-Key"); key != "test-local-key" {
-						t.Errorf("Zotero-API-Key = %q, want test-local-key", key)
+					if key := r.Header.Get("Zotero-API-Key"); key != "TEST-KEY" {
+						t.Errorf("Zotero-API-Key = %q, want the lease's bound key TEST-KEY", key)
 					}
 					gotVersion = r.Header.Get("If-Unmodified-Since-Version")
 					w.WriteHeader(http.StatusNoContent)

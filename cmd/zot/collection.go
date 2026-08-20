@@ -61,9 +61,6 @@ func collectionCreateAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	if k := loadLocalKey(); k != "" {
-		c.SetLocalKey(k)
-	}
 
 	var parentValue any = false
 	if parent != "" {
@@ -97,7 +94,7 @@ func collectionCreateAction(ctx context.Context, cmd *cli.Command) error {
 		return nil
 	}
 
-	if err := ensureLocalKey(ctx, c); err != nil {
+	if err := ensureWriteAuthority(ctx, cmd, c, mode); err != nil {
 		return err
 	}
 	res, err := c.CreateCollections(ctx, zotero.OpCollectionCreate, lib, cols)
@@ -235,9 +232,6 @@ func collectionRenameAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	if k := loadLocalKey(); k != "" {
-		c.SetLocalKey(k)
-	}
 
 	col, err := c.Collection(ctx, lib, key)
 	if err != nil {
@@ -267,7 +261,7 @@ func collectionRenameAction(ctx context.Context, cmd *cli.Command) error {
 		return nil
 	}
 
-	if err := ensureLocalKey(ctx, c); err != nil {
+	if err := ensureWriteAuthority(ctx, cmd, c, mode); err != nil {
 		return err
 	}
 	patch, err := json.Marshal(map[string]string{"name": name})
@@ -325,9 +319,6 @@ func collectionMoveAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	if k := loadLocalKey(); k != "" {
-		c.SetLocalKey(k)
-	}
 
 	col, err := c.Collection(ctx, lib, key)
 	if err != nil {
@@ -364,7 +355,7 @@ func collectionMoveAction(ctx context.Context, cmd *cli.Command) error {
 		return nil
 	}
 
-	if err := ensureLocalKey(ctx, c); err != nil {
+	if err := ensureWriteAuthority(ctx, cmd, c, mode); err != nil {
 		return err
 	}
 	patch, err := json.Marshal(map[string]any{"parentCollection": parentValue})
@@ -415,9 +406,6 @@ func collectionDeleteAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	if k := loadLocalKey(); k != "" {
-		c.SetLocalKey(k)
-	}
 
 	w := out(cmd)
 	if mode == output.ModeHuman {
@@ -465,7 +453,7 @@ func collectionDeleteAction(ctx context.Context, cmd *cli.Command) error {
 		return nil
 	}
 
-	if err := ensureLocalKey(ctx, c); err != nil {
+	if err := ensureWriteAuthority(ctx, cmd, c, mode); err != nil {
 		return err
 	}
 	version, err := c.LibraryVersion(ctx, lib)

@@ -96,6 +96,7 @@ func rootCommand() *cli.Command {
 			itemCommand(),
 			collectionCommand(),
 			tagCommand(),
+			grantCommand(),
 		},
 	}
 }
@@ -123,11 +124,11 @@ func newClient(cmd *cli.Command) (*zotero.Client, error) {
 	} else {
 		c = zotero.New(cmd.String("url"))
 	}
-	// The client denies writes until an authority is installed. Interactive,
-	// human-confirmed writes are the user's own authority, so the CLI's default
-	// stance is permissive; a write lease will narrow this for non-interactive
-	// writes. Reads ignore the authorizer entirely.
-	c.SetWriteAuthorizer(zotero.AllowAllWrites())
+	// The client denies writes until a command establishes authority
+	// (ensureWriteAuthority: allow-all for an interactive human-confirmed write, a
+	// write lease for a non-interactive one). Leaving the default in place means a
+	// write path that never establishes authority fails closed. Reads ignore the
+	// authorizer entirely.
 	return c, nil
 }
 
