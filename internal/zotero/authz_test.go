@@ -71,11 +71,27 @@ func TestWrite_AuthorizerSeesOperationAndLibrary(t *testing.T) {
 		{"item.delete", OpItemDelete, func(c *Client) error {
 			return c.DeleteItems(context.Background(), OpItemDelete, group, []string{"AAAA1111"}, 1)
 		}},
-		{"collection.rename", OpCollectionRename, func(c *Client) error {
-			return c.PatchCollection(context.Background(), OpCollectionRename, group, "COLL0001", json.RawMessage(`{}`), 1)
+		{"tag.add", OpTagAdd, func(c *Client) error {
+			return c.PatchItem(context.Background(), OpTagAdd, group, "AAAA1111", json.RawMessage(`{}`), 1)
+		}},
+		{"tag.remove", OpTagRemove, func(c *Client) error {
+			return c.PatchItem(context.Background(), OpTagRemove, group, "AAAA1111", json.RawMessage(`{}`), 1)
 		}},
 		{"tag.delete", OpTagDelete, func(c *Client) error {
 			return c.DeleteTags(context.Background(), OpTagDelete, group, []string{"todo"}, 1)
+		}},
+		{"collection.create", OpCollectionCreate, func(c *Client) error {
+			_, err := c.CreateCollections(context.Background(), OpCollectionCreate, group, []json.RawMessage{json.RawMessage(`{"name":"X"}`)})
+			return err
+		}},
+		{"collection.rename", OpCollectionRename, func(c *Client) error {
+			return c.PatchCollection(context.Background(), OpCollectionRename, group, "COLL0001", json.RawMessage(`{}`), 1)
+		}},
+		{"collection.move", OpCollectionMove, func(c *Client) error {
+			return c.PatchCollection(context.Background(), OpCollectionMove, group, "COLL0001", json.RawMessage(`{}`), 1)
+		}},
+		{"collection.delete", OpCollectionDelete, func(c *Client) error {
+			return c.DeleteCollections(context.Background(), OpCollectionDelete, group, []string{"COLL0001"}, 1)
 		}},
 	}
 	for _, tc := range cases {
