@@ -26,8 +26,13 @@ type writeOptions struct {
 	// optimistic-concurrency precondition the local write API requires.
 	ifUnmodifiedSince *int
 	// keyless omits the local API key. Only /api/local/authorize sets it: that is
-	// how the key is obtained, so it cannot require one.
+	// how the key is obtained, so it cannot require one. A keyless request is the
+	// mint/bootstrap path and is exempt from write authorization.
 	keyless bool
+	// operation and library identify the write for the WriteAuthorizer. Every
+	// non-keyless write sets them, so authority is checked before any network I/O.
+	operation Operation
+	library   LibraryRef
 	// timeout overrides the client's default for this request (0 = default).
 	timeout time.Duration
 }
@@ -37,6 +42,14 @@ type writeOptions struct {
 // then maps the write-specific status codes onto the error taxonomy. It returns
 // the status and body for the caller to interpret on success (2xx).
 func (c *Client) writeRequest(ctx context.Context, method, path string, opts writeOptions) (int, []byte, error) {
+	// Authorize before any network I/O, so a denial is free and fails closed. The
+	// keyless mint/bootstrap path (/api/local/authorize) carries no operation and
+	// is exempt — it is how write authority is obtained in the first place.
+	if !opts.keyless {
+		if err := c.authorizeWrite(opts.operation, opts.library); err != nil {
+			return 0, nil, err
+		}
+	}
 	// Every write must echo Zotero-Server-ID (428 without it). Bootstrap it here
 	// rather than in the caller, so a write works even when no prior read or
 	// Authorize populated the cache — e.g. a fresh process reusing a stored key.
@@ -268,7 +281,7 @@ const MaxDeleteObjects = 50
 // writeBatch POSTs a batch of JSON objects to a collection route and parses the
 // shared Web-v3 write response. Batch creation carries no version precondition —
 // there is nothing prior to guard — which the server treats as optional here.
-func (c *Client) writeBatch(ctx context.Context, path string, objs []json.RawMessage) (WriteResult, error) {
+func (c *Client) writeBatch(ctx context.Context, op Operation, lib LibraryRef, path string, objs []json.RawMessage) (WriteResult, error) {
 	if len(objs) == 0 {
 		return WriteResult{}, nil
 	}
@@ -279,7 +292,7 @@ func (c *Client) writeBatch(ctx context.Context, path string, objs []json.RawMes
 	if err != nil {
 		return WriteResult{}, err
 	}
-	status, respBody, err := c.writeRequest(ctx, http.MethodPost, path, writeOptions{body: body})
+	status, respBody, err := c.writeRequest(ctx, http.MethodPost, path, writeOptions{body: body, operation: op, library: lib})
 	if err != nil {
 		return WriteResult{}, err
 	}
@@ -292,10 +305,12 @@ func (c *Client) writeBatch(ctx context.Context, path string, objs []json.RawMes
 // patchObject applies a partial update to one object. Single-object writes
 // require the version precondition, so ifUnmodifiedSince guards against a
 // concurrent edit (412 → ErrPreconditionFailed). Success is 204.
-func (c *Client) patchObject(ctx context.Context, path string, patch json.RawMessage, ifUnmodifiedSince int) error {
+func (c *Client) patchObject(ctx context.Context, op Operation, lib LibraryRef, path string, patch json.RawMessage, ifUnmodifiedSince int) error {
 	status, body, err := c.writeRequest(ctx, http.MethodPatch, path, writeOptions{
 		body:              patch,
 		ifUnmodifiedSince: &ifUnmodifiedSince,
+		operation:         op,
+		library:           lib,
 	})
 	if err != nil {
 		return err
@@ -309,10 +324,12 @@ func (c *Client) patchObject(ctx context.Context, path string, patch json.RawMes
 // putObject overwrites one object with a complete representation (PUT). Unlike
 // patchObject, fields absent from body are reset to their defaults, so the
 // caller must send the whole object. Version-guarded; success is 204.
-func (c *Client) putObject(ctx context.Context, path string, body json.RawMessage, ifUnmodifiedSince int) error {
+func (c *Client) putObject(ctx context.Context, op Operation, lib LibraryRef, path string, body json.RawMessage, ifUnmodifiedSince int) error {
 	status, respBody, err := c.writeRequest(ctx, http.MethodPut, path, writeOptions{
 		body:              body,
 		ifUnmodifiedSince: &ifUnmodifiedSince,
+		operation:         op,
+		library:           lib,
 	})
 	if err != nil {
 		return err
@@ -325,9 +342,11 @@ func (c *Client) putObject(ctx context.Context, path string, body json.RawMessag
 
 // deleteByQuery issues a version-guarded DELETE whose targets are named in the
 // query string (itemKey=/collectionKey=/tag=). Success is 204.
-func (c *Client) deleteByQuery(ctx context.Context, path string, q url.Values, ifUnmodifiedSince int) error {
+func (c *Client) deleteByQuery(ctx context.Context, op Operation, lib LibraryRef, path string, q url.Values, ifUnmodifiedSince int) error {
 	status, body, err := c.writeRequest(ctx, http.MethodDelete, path+"?"+q.Encode(), writeOptions{
 		ifUnmodifiedSince: &ifUnmodifiedSince,
+		operation:         op,
+		library:           lib,
 	})
 	if err != nil {
 		return err
@@ -340,13 +359,15 @@ func (c *Client) deleteByQuery(ctx context.Context, path string, q url.Values, i
 
 // CreateItems creates items from their JSON representations (itemType plus
 // fields) in one batch write.
-func (c *Client) CreateItems(ctx context.Context, lib LibraryRef, items []json.RawMessage) (WriteResult, error) {
-	return c.writeBatch(ctx, c.profile.LibraryPrefix(lib)+"/items", items)
+func (c *Client) CreateItems(ctx context.Context, op Operation, lib LibraryRef, items []json.RawMessage) (WriteResult, error) {
+	return c.writeBatch(ctx, op, lib, c.profile.LibraryPrefix(lib)+"/items", items)
 }
 
-// PatchItem applies a partial update (a JSON object of fields to change) to one item.
-func (c *Client) PatchItem(ctx context.Context, lib LibraryRef, key string, patch json.RawMessage, ifUnmodifiedSince int) error {
-	return c.patchObject(ctx, c.profile.LibraryPrefix(lib)+"/items/"+url.PathEscape(key), patch, ifUnmodifiedSince)
+// PatchItem applies a partial update (a JSON object of fields to change) to one
+// item. It backs item.patch as well as tag.add/tag.remove, which edit the item's
+// tags array — so the caller names the operation.
+func (c *Client) PatchItem(ctx context.Context, op Operation, lib LibraryRef, key string, patch json.RawMessage, ifUnmodifiedSince int) error {
+	return c.patchObject(ctx, op, lib, c.profile.LibraryPrefix(lib)+"/items/"+url.PathEscape(key), patch, ifUnmodifiedSince)
 }
 
 // ReplaceItem overwrites one item with a complete JSON representation (PUT).
@@ -355,51 +376,53 @@ func (c *Client) PatchItem(ctx context.Context, lib LibraryRef, key string, patc
 // to behave otherwise against the local API: an omitted "tags" is preserved
 // rather than cleared, so a caller that means to strip tags must send
 // "tags": []. (Omitted "collections" is cleared, like ordinary fields.)
-func (c *Client) ReplaceItem(ctx context.Context, lib LibraryRef, key string, full json.RawMessage, ifUnmodifiedSince int) error {
-	return c.putObject(ctx, c.profile.LibraryPrefix(lib)+"/items/"+url.PathEscape(key), full, ifUnmodifiedSince)
+func (c *Client) ReplaceItem(ctx context.Context, op Operation, lib LibraryRef, key string, full json.RawMessage, ifUnmodifiedSince int) error {
+	return c.putObject(ctx, op, lib, c.profile.LibraryPrefix(lib)+"/items/"+url.PathEscape(key), full, ifUnmodifiedSince)
 }
 
 // DeleteItems removes items by key in one request (itemKey=…).
-func (c *Client) DeleteItems(ctx context.Context, lib LibraryRef, keys []string, ifUnmodifiedSince int) error {
+func (c *Client) DeleteItems(ctx context.Context, op Operation, lib LibraryRef, keys []string, ifUnmodifiedSince int) error {
 	if len(keys) == 0 {
 		return nil
 	}
 	if len(keys) > MaxDeleteObjects {
 		return fmt.Errorf("%d keys exceeds the %d-object delete limit", len(keys), MaxDeleteObjects)
 	}
-	return c.deleteByQuery(ctx, c.profile.LibraryPrefix(lib)+"/items", url.Values{"itemKey": {strings.Join(keys, ",")}}, ifUnmodifiedSince)
+	return c.deleteByQuery(ctx, op, lib, c.profile.LibraryPrefix(lib)+"/items", url.Values{"itemKey": {strings.Join(keys, ",")}}, ifUnmodifiedSince)
 }
 
 // CreateCollections creates collections ({name, parentCollection}) in one batch.
-func (c *Client) CreateCollections(ctx context.Context, lib LibraryRef, cols []json.RawMessage) (WriteResult, error) {
-	return c.writeBatch(ctx, c.profile.LibraryPrefix(lib)+"/collections", cols)
+func (c *Client) CreateCollections(ctx context.Context, op Operation, lib LibraryRef, cols []json.RawMessage) (WriteResult, error) {
+	return c.writeBatch(ctx, op, lib, c.profile.LibraryPrefix(lib)+"/collections", cols)
 }
 
-// PatchCollection applies a partial update to one collection (e.g. {"name":…}).
-func (c *Client) PatchCollection(ctx context.Context, lib LibraryRef, key string, patch json.RawMessage, ifUnmodifiedSince int) error {
-	return c.patchObject(ctx, c.profile.LibraryPrefix(lib)+"/collections/"+url.PathEscape(key), patch, ifUnmodifiedSince)
+// PatchCollection applies a partial update to one collection. It backs
+// collection.rename ({"name":…}) and collection.move ({"parentCollection":…}),
+// so the caller names the operation.
+func (c *Client) PatchCollection(ctx context.Context, op Operation, lib LibraryRef, key string, patch json.RawMessage, ifUnmodifiedSince int) error {
+	return c.patchObject(ctx, op, lib, c.profile.LibraryPrefix(lib)+"/collections/"+url.PathEscape(key), patch, ifUnmodifiedSince)
 }
 
 // DeleteCollections removes collections by key (collectionKey=…). Deleting a
 // collection does not delete its items.
-func (c *Client) DeleteCollections(ctx context.Context, lib LibraryRef, keys []string, ifUnmodifiedSince int) error {
+func (c *Client) DeleteCollections(ctx context.Context, op Operation, lib LibraryRef, keys []string, ifUnmodifiedSince int) error {
 	if len(keys) == 0 {
 		return nil
 	}
 	if len(keys) > MaxDeleteObjects {
 		return fmt.Errorf("%d keys exceeds the %d-object delete limit", len(keys), MaxDeleteObjects)
 	}
-	return c.deleteByQuery(ctx, c.profile.LibraryPrefix(lib)+"/collections", url.Values{"collectionKey": {strings.Join(keys, ",")}}, ifUnmodifiedSince)
+	return c.deleteByQuery(ctx, op, lib, c.profile.LibraryPrefix(lib)+"/collections", url.Values{"collectionKey": {strings.Join(keys, ",")}}, ifUnmodifiedSince)
 }
 
 // DeleteTags removes tags from the whole library by name (tag=a||b||…),
 // stripping each from every item. Names are joined with "||" as the API expects.
-func (c *Client) DeleteTags(ctx context.Context, lib LibraryRef, names []string, ifUnmodifiedSince int) error {
+func (c *Client) DeleteTags(ctx context.Context, op Operation, lib LibraryRef, names []string, ifUnmodifiedSince int) error {
 	if len(names) == 0 {
 		return nil
 	}
 	if len(names) > MaxDeleteObjects {
 		return fmt.Errorf("%d tags exceeds the %d-tag delete limit", len(names), MaxDeleteObjects)
 	}
-	return c.deleteByQuery(ctx, c.profile.LibraryPrefix(lib)+"/tags", url.Values{"tag": {strings.Join(names, "||")}}, ifUnmodifiedSince)
+	return c.deleteByQuery(ctx, op, lib, c.profile.LibraryPrefix(lib)+"/tags", url.Values{"tag": {strings.Join(names, "||")}}, ifUnmodifiedSince)
 }

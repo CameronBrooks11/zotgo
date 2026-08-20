@@ -108,7 +108,7 @@ func itemCreateAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	res, err := c.CreateItems(ctx, lib, items)
+	res, err := c.CreateItems(ctx, zotero.OpItemCreate, lib, items)
 	if err != nil {
 		return writeFriendly(err)
 	}
@@ -489,7 +489,7 @@ func itemPatchAction(ctx context.Context, cmd *cli.Command) error {
 	if err := ensureLocalKey(ctx, c); err != nil {
 		return err
 	}
-	if err := c.PatchItem(ctx, lib, key, patch, item.Version); err != nil {
+	if err := c.PatchItem(ctx, zotero.OpItemPatch, lib, key, patch, item.Version); err != nil {
 		return writeFriendly(err)
 	}
 	if mode != output.ModeHuman {
@@ -594,7 +594,7 @@ func itemReplaceAction(ctx context.Context, cmd *cli.Command) error {
 	if err := ensureLocalKey(ctx, c); err != nil {
 		return err
 	}
-	if err := c.ReplaceItem(ctx, lib, key, full, item.Version); err != nil {
+	if err := c.ReplaceItem(ctx, zotero.OpItemReplace, lib, key, full, item.Version); err != nil {
 		return writeFriendly(err)
 	}
 	if mode != output.ModeHuman {
@@ -742,7 +742,7 @@ func itemDeleteAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return friendly(err)
 	}
-	if err := c.DeleteItems(ctx, lib, found, version); err != nil {
+	if err := c.DeleteItems(ctx, zotero.OpItemDelete, lib, found, version); err != nil {
 		return writeFriendly(err)
 	}
 	if mode != output.ModeHuman {

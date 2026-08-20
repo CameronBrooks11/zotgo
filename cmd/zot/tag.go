@@ -95,7 +95,7 @@ func tagDeleteAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return friendly(err)
 	}
-	if err := c.DeleteTags(ctx, lib, names, version); err != nil {
+	if err := c.DeleteTags(ctx, zotero.OpTagDelete, lib, names, version); err != nil {
 		return writeFriendly(err)
 	}
 	if mode != output.ModeHuman {
@@ -175,11 +175,13 @@ func itemTagAction(ctx context.Context, cmd *cli.Command, add bool) error {
 	var next []zotero.Tag
 	var changed []string
 	verb, past := "add", "added"
+	tagOp := zotero.OpTagAdd
 	if add {
 		next, changed = addTags(data.Tags, names)
 	} else {
 		next, changed = removeTags(data.Tags, names)
 		verb, past = "remove", "removed"
+		tagOp = zotero.OpTagRemove
 	}
 
 	// One record per requested tag, in order: the ones actually spliced are
@@ -236,7 +238,7 @@ func itemTagAction(ctx context.Context, cmd *cli.Command, add bool) error {
 	if err != nil {
 		return err
 	}
-	if err := c.PatchItem(ctx, lib, itemKey, patch, item.Version); err != nil {
+	if err := c.PatchItem(ctx, tagOp, lib, itemKey, patch, item.Version); err != nil {
 		return writeFriendly(err)
 	}
 	if mode != output.ModeHuman {

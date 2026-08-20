@@ -29,6 +29,8 @@ func liveWriteClient(t *testing.T) (*Client, LibraryRef) {
 	if !h.Supports(CapabilityWrite) {
 		t.Skip("this Zotero build has no local write API; run against a write-capable build (beta/main)")
 	}
+	// This test exercises the write mechanism, not the authority gate; permit all.
+	c.SetWriteAuthorizer(AllowAllWrites())
 	return c, UserLibrary()
 }
 
@@ -65,7 +67,7 @@ func TestLiveWriteRoundTrip(t *testing.T) {
 
 	// Create.
 	item := json.RawMessage(`{"itemType":"book","title":"zotgo live write test"}`)
-	res, err := c.CreateItems(ctx, lib, []json.RawMessage{item})
+	res, err := c.CreateItems(ctx, OpItemCreate, lib, []json.RawMessage{item})
 	if err != nil {
 		t.Fatalf("CreateItems: %v", err)
 	}
@@ -88,7 +90,7 @@ func TestLiveWriteRoundTrip(t *testing.T) {
 	}
 
 	// Patch, guarded by the object's current version.
-	if err := c.PatchItem(ctx, lib, created.Key, json.RawMessage(`{"title":"zotgo patched"}`), got.Version); err != nil {
+	if err := c.PatchItem(ctx, OpItemPatch, lib, created.Key, json.RawMessage(`{"title":"zotgo patched"}`), got.Version); err != nil {
 		t.Fatalf("PatchItem: %v", err)
 	}
 	got, err = c.Item(ctx, lib, created.Key)
@@ -100,7 +102,7 @@ func TestLiveWriteRoundTrip(t *testing.T) {
 	}
 
 	// Delete, then confirm it is gone (also cleans up the test item).
-	if err := c.DeleteItems(ctx, lib, []string{created.Key}, libraryVersion(t, c, lib)); err != nil {
+	if err := c.DeleteItems(ctx, OpItemDelete, lib, []string{created.Key}, libraryVersion(t, c, lib)); err != nil {
 		t.Fatalf("DeleteItems: %v", err)
 	}
 	if _, err := c.Item(ctx, lib, created.Key); err != ErrNotFound {
@@ -108,7 +110,7 @@ func TestLiveWriteRoundTrip(t *testing.T) {
 	}
 
 	// Collections: create, rename, delete under the same authorization.
-	cres, err := c.CreateCollections(ctx, lib, []json.RawMessage{json.RawMessage(`{"name":"zotgo live coll","parentCollection":false}`)})
+	cres, err := c.CreateCollections(ctx, OpCollectionCreate, lib, []json.RawMessage{json.RawMessage(`{"name":"zotgo live coll","parentCollection":false}`)})
 	if err != nil {
 		t.Fatalf("CreateCollections: %v", err)
 	}
@@ -117,7 +119,7 @@ func TestLiveWriteRoundTrip(t *testing.T) {
 	}
 	ck := cres.Successful["0"].Key
 	createdCollection := cres.Successful["0"]
-	if err := c.PatchCollection(ctx, lib, ck, json.RawMessage(`{"name":"zotgo live renamed"}`), createdCollection.Version); err != nil {
+	if err := c.PatchCollection(ctx, OpCollectionRename, lib, ck, json.RawMessage(`{"name":"zotgo live renamed"}`), createdCollection.Version); err != nil {
 		t.Fatalf("PatchCollection: %v", err)
 	}
 	col, err := c.Collection(ctx, lib, ck)
@@ -127,17 +129,17 @@ func TestLiveWriteRoundTrip(t *testing.T) {
 	if data, _ := col.CollectionData(); data.Name != "zotgo live renamed" {
 		t.Errorf("renamed collection name = %q, want zotgo live renamed", data.Name)
 	}
-	if err := c.DeleteCollections(ctx, lib, []string{ck}, libraryVersion(t, c, lib)); err != nil {
+	if err := c.DeleteCollections(ctx, OpCollectionDelete, lib, []string{ck}, libraryVersion(t, c, lib)); err != nil {
 		t.Fatalf("DeleteCollections: %v", err)
 	}
 
 	// Tags: create a tagged item, strip the tag library-wide, confirm it's gone.
-	tres, err := c.CreateItems(ctx, lib, []json.RawMessage{json.RawMessage(`{"itemType":"book","title":"zotgo live tag","tags":[{"tag":"zotgolivetag"}]}`)})
+	tres, err := c.CreateItems(ctx, OpItemCreate, lib, []json.RawMessage{json.RawMessage(`{"itemType":"book","title":"zotgo live tag","tags":[{"tag":"zotgolivetag"}]}`)})
 	if err != nil {
 		t.Fatalf("create tagged item: %v", err)
 	}
 	tk := tres.Successful["0"].Key
-	if err := c.DeleteTags(ctx, lib, []string{"zotgolivetag"}, libraryVersion(t, c, lib)); err != nil {
+	if err := c.DeleteTags(ctx, OpTagDelete, lib, []string{"zotgolivetag"}, libraryVersion(t, c, lib)); err != nil {
 		t.Fatalf("DeleteTags: %v", err)
 	}
 	after, err := c.Item(ctx, lib, tk)
@@ -147,5 +149,5 @@ func TestLiveWriteRoundTrip(t *testing.T) {
 	if d, _ := after.ItemData(); len(d.Tags) != 0 {
 		t.Errorf("tag survived library-wide delete: %+v", d.Tags)
 	}
-	_ = c.DeleteItems(ctx, lib, []string{tk}, libraryVersion(t, c, lib)) // cleanup
+	_ = c.DeleteItems(ctx, OpItemDelete, lib, []string{tk}, libraryVersion(t, c, lib)) // cleanup
 }

@@ -113,14 +113,22 @@ func out(cmd *cli.Command) io.Writer {
 // by default, or the Web API under --web. The Web API key is read from the
 // environment, never a flag, so it cannot leak into `ps` output or shell history.
 func newClient(cmd *cli.Command) (*zotero.Client, error) {
+	var c *zotero.Client
 	if cmd.Bool("web") {
 		key := os.Getenv("ZOTGO_API_KEY")
 		if key == "" {
 			return nil, errors.New("--web needs a Zotero API key; set ZOTGO_API_KEY (create one at https://www.zotero.org/settings/keys)")
 		}
-		return zotero.NewWeb(cmd.String("url"), key), nil
+		c = zotero.NewWeb(cmd.String("url"), key)
+	} else {
+		c = zotero.New(cmd.String("url"))
 	}
-	return zotero.New(cmd.String("url")), nil
+	// The client denies writes until an authority is installed. Interactive,
+	// human-confirmed writes are the user's own authority, so the CLI's default
+	// stance is permissive; a write lease will narrow this for non-interactive
+	// writes. Reads ignore the authorizer entirely.
+	c.SetWriteAuthorizer(zotero.AllowAllWrites())
+	return c, nil
 }
 
 // resolveLibrary builds a client for the selected endpoint and resolves
