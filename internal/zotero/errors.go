@@ -39,6 +39,11 @@ var (
 	// ErrAuthorizeDenied means the user declined the local write authorization
 	// prompt in Zotero.
 	ErrAuthorizeDenied = errors.New("zotero write authorization denied")
+	// ErrWriteNotAuthorized means no WriteAuthorizer permitted the write: none was
+	// installed (deny-by-default) or the installed one refused without a more
+	// specific reason. It is distinct from ErrWriteUnauthorized, which is Zotero's
+	// own 401 for a bad key.
+	ErrWriteNotAuthorized = errors.New("write not authorized")
 	// ErrWriteUnauthorized means a local write was rejected for a missing or
 	// consumed local API key (HTTP 401): re-authorize.
 	ErrWriteUnauthorized = errors.New("zotero local write not authorized")

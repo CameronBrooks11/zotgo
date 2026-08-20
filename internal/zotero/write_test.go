@@ -10,6 +10,14 @@ import (
 	"testing"
 )
 
+// writeTestClient is New with an allow-all WriteAuthorizer installed, for tests
+// that exercise the write mechanism itself rather than the deny-by-default gate.
+func writeTestClient(baseURL string, opts ...Option) *Client {
+	c := New(baseURL, opts...)
+	c.SetWriteAuthorizer(AllowAllWrites())
+	return c
+}
+
 // The client caches Zotero-Server-ID from ordinary reads so it can resend it on
 // writes, which require it. A build without the header leaves the cache empty.
 func TestServerID_CapturedFromReads(t *testing.T) {
@@ -22,7 +30,7 @@ func TestServerID_CapturedFromReads(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL)
+	c := writeTestClient(srv.URL)
 	if c.ServerID() != "" {
 		t.Fatalf("fresh client ServerID = %q, want empty", c.ServerID())
 	}
@@ -105,9 +113,9 @@ func TestWriteRequest_BootstrapsServerIDWhenUncached(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	c := New(srv.URL)
+	c := writeTestClient(srv.URL)
 	c.SetLocalKey("K") // no prior read; Server-ID is not cached yet
-	if _, err := c.CreateItems(context.Background(), UserLibrary(), []json.RawMessage{json.RawMessage(`{"itemType":"book"}`)}); err != nil {
+	if _, err := c.CreateItems(context.Background(), OpItemCreate, UserLibrary(), []json.RawMessage{json.RawMessage(`{"itemType":"book"}`)}); err != nil {
 		t.Fatalf("CreateItems: %v", err)
 	}
 	if gotServerID != "srv-boot" {
@@ -118,7 +126,7 @@ func TestWriteRequest_BootstrapsServerIDWhenUncached(t *testing.T) {
 func TestAuthorize_ApprovedStoresKeyAndBootstrapsServerID(t *testing.T) {
 	srv, rec := authorizeFake(t, true)
 	defer srv.Close()
-	c := New(srv.URL)
+	c := writeTestClient(srv.URL)
 
 	remember, err := c.Authorize(context.Background(), "zotgo")
 	if err != nil {
@@ -146,7 +154,7 @@ func TestAuthorize_ApprovedStoresKeyAndBootstrapsServerID(t *testing.T) {
 func TestAuthorize_DeniedReturnsSentinel(t *testing.T) {
 	srv, _ := authorizeFake(t, false)
 	defer srv.Close()
-	c := New(srv.URL)
+	c := writeTestClient(srv.URL)
 
 	if _, err := c.Authorize(context.Background(), "zotgo"); !errors.Is(err, ErrAuthorizeDenied) {
 		t.Fatalf("err = %v, want ErrAuthorizeDenied", err)
@@ -182,7 +190,7 @@ func TestWriteRequest_MapsPreconditionStatuses(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(tc.status)
 		}))
-		c := New(srv.URL)
+		c := writeTestClient(srv.URL)
 		primeServerID(c) // a real write client already has one; isolate the write itself
 		_, _, err := c.writeRequest(context.Background(), http.MethodDelete, "/api/users/0/items/AAAA1111", writeOptions{})
 		if !errors.Is(err, tc.want) {
@@ -203,7 +211,7 @@ func TestWriteRequest_SendsHeaders(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL)
+	c := writeTestClient(srv.URL)
 	c.SetLocalKey("K")
 	idHeader := http.Header{}
 	idHeader.Set("Zotero-Server-ID", "srv-9")
@@ -253,10 +261,10 @@ func TestCreateItems_PostsBatchAndParses(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL)
+	c := writeTestClient(srv.URL)
 	c.SetLocalKey("K")
 	items := []json.RawMessage{json.RawMessage(`{"itemType":"book","title":"Made"}`)}
-	r, err := c.CreateItems(context.Background(), UserLibrary(), items)
+	r, err := c.CreateItems(context.Background(), OpItemCreate, UserLibrary(), items)
 	if err != nil {
 		t.Fatalf("CreateItems: %v", err)
 	}
@@ -280,7 +288,7 @@ func TestCreateItems_RejectsOversizeBatch(t *testing.T) {
 	for i := range items {
 		items[i] = json.RawMessage(`{"itemType":"book"}`)
 	}
-	if _, err := New("http://x").CreateItems(context.Background(), UserLibrary(), items); err == nil {
+	if _, err := writeTestClient("http://x").CreateItems(context.Background(), OpItemCreate, UserLibrary(), items); err == nil {
 		t.Fatal("expected an over-limit error")
 	}
 }
@@ -296,9 +304,9 @@ func TestPatchItem_SendsPatchVersionAndSucceedsOn204(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL)
+	c := writeTestClient(srv.URL)
 	c.SetLocalKey("K")
-	if err := c.PatchItem(context.Background(), UserLibrary(), "AAAA1111", json.RawMessage(`{"title":"New"}`), 12); err != nil {
+	if err := c.PatchItem(context.Background(), OpItemPatch, UserLibrary(), "AAAA1111", json.RawMessage(`{"title":"New"}`), 12); err != nil {
 		t.Fatalf("PatchItem: %v", err)
 	}
 	if gotMethod != http.MethodPatch || gotPath != "/api/users/0/items/AAAA1111" {
@@ -318,10 +326,10 @@ func TestPatchItem_ConflictSurfaces(t *testing.T) {
 		w.WriteHeader(http.StatusPreconditionFailed)
 	}))
 	defer srv.Close()
-	c := New(srv.URL)
+	c := writeTestClient(srv.URL)
 	c.SetLocalKey("K")
 	primeServerID(c)
-	err := c.PatchItem(context.Background(), UserLibrary(), "AAAA1111", json.RawMessage(`{}`), 1)
+	err := c.PatchItem(context.Background(), OpItemPatch, UserLibrary(), "AAAA1111", json.RawMessage(`{}`), 1)
 	if !errors.Is(err, ErrPreconditionFailed) {
 		t.Fatalf("err = %v, want ErrPreconditionFailed", err)
 	}
@@ -337,9 +345,9 @@ func TestDeleteItems_SendsKeysAndVersion(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL)
+	c := writeTestClient(srv.URL)
 	c.SetLocalKey("K")
-	if err := c.DeleteItems(context.Background(), UserLibrary(), []string{"AAAA1111", "BBBB2222"}, 7); err != nil {
+	if err := c.DeleteItems(context.Background(), OpItemDelete, UserLibrary(), []string{"AAAA1111", "BBBB2222"}, 7); err != nil {
 		t.Fatalf("DeleteItems: %v", err)
 	}
 	if gotMethod != http.MethodDelete {
@@ -358,7 +366,7 @@ func TestDeleteItems_RejectsOversize(t *testing.T) {
 	for i := range keys {
 		keys[i] = "KEY"
 	}
-	if err := New("http://x").DeleteItems(context.Background(), UserLibrary(), keys, 1); err == nil {
+	if err := writeTestClient("http://x").DeleteItems(context.Background(), OpItemDelete, UserLibrary(), keys, 1); err == nil {
 		t.Fatal("expected an over-limit error")
 	}
 }
@@ -370,11 +378,11 @@ func TestCreateCollections_PostsToCollectionsRoute(t *testing.T) {
 		_, _ = w.Write([]byte(`{"successful":{"0":{"key":"COLL0001","version":3,"data":{"name":"New"}}},"unchanged":{},"failed":{}}`))
 	}))
 	defer srv.Close()
-	c := New(srv.URL)
+	c := writeTestClient(srv.URL)
 	c.SetLocalKey("K")
 	primeServerID(c)
 
-	res, err := c.CreateCollections(context.Background(), UserLibrary(), []json.RawMessage{json.RawMessage(`{"name":"New","parentCollection":false}`)})
+	res, err := c.CreateCollections(context.Background(), OpCollectionCreate, UserLibrary(), []json.RawMessage{json.RawMessage(`{"name":"New","parentCollection":false}`)})
 	if err != nil {
 		t.Fatalf("CreateCollections: %v", err)
 	}
@@ -394,11 +402,11 @@ func TestPatchCollection_SendsPatchAndVersion(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer srv.Close()
-	c := New(srv.URL)
+	c := writeTestClient(srv.URL)
 	c.SetLocalKey("K")
 	primeServerID(c)
 
-	if err := c.PatchCollection(context.Background(), UserLibrary(), "COLL0001", json.RawMessage(`{"name":"Renamed"}`), 4); err != nil {
+	if err := c.PatchCollection(context.Background(), OpCollectionRename, UserLibrary(), "COLL0001", json.RawMessage(`{"name":"Renamed"}`), 4); err != nil {
 		t.Fatalf("PatchCollection: %v", err)
 	}
 	if gotMethod != http.MethodPatch || gotPath != "/api/users/0/collections/COLL0001" || gotVer != "4" {
@@ -413,11 +421,11 @@ func TestDeleteCollections_UsesCollectionKeyParam(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer srv.Close()
-	c := New(srv.URL)
+	c := writeTestClient(srv.URL)
 	c.SetLocalKey("K")
 	primeServerID(c)
 
-	if err := c.DeleteCollections(context.Background(), UserLibrary(), []string{"COLL0001", "COLL0002"}, 5); err != nil {
+	if err := c.DeleteCollections(context.Background(), OpCollectionDelete, UserLibrary(), []string{"COLL0001", "COLL0002"}, 5); err != nil {
 		t.Fatalf("DeleteCollections: %v", err)
 	}
 	if gotKeys != "COLL0001,COLL0002" {
@@ -434,11 +442,11 @@ func TestDeleteTags_JoinsNamesWithDoublePipe(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer srv.Close()
-	c := New(srv.URL)
+	c := writeTestClient(srv.URL)
 	c.SetLocalKey("K")
 	primeServerID(c)
 
-	if err := c.DeleteTags(context.Background(), UserLibrary(), []string{"todo", "to read"}, 6); err != nil {
+	if err := c.DeleteTags(context.Background(), OpTagDelete, UserLibrary(), []string{"todo", "to read"}, 6); err != nil {
 		t.Fatalf("DeleteTags: %v", err)
 	}
 	if gotMethod != http.MethodDelete || gotPath != "/api/users/0/tags" {

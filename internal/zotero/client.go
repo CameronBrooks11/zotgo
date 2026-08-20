@@ -45,6 +45,9 @@ type Client struct {
 	// Empty until obtained; unrelated to a Web API key, and sent via the same
 	// Zotero-API-Key header only on local write requests.
 	localKey string
+	// writeAuthorizer is the policy consulted before every write. Nil denies all
+	// writes (deny-by-default); the CLI installs one per invocation.
+	writeAuthorizer WriteAuthorizer
 }
 
 // Rate-limit handling for the Web API. The Local API never rate-limits, so these

@@ -100,7 +100,7 @@ func collectionCreateAction(ctx context.Context, cmd *cli.Command) error {
 	if err := ensureLocalKey(ctx, c); err != nil {
 		return err
 	}
-	res, err := c.CreateCollections(ctx, lib, cols)
+	res, err := c.CreateCollections(ctx, zotero.OpCollectionCreate, lib, cols)
 	if err != nil {
 		return writeFriendly(err)
 	}
@@ -274,7 +274,7 @@ func collectionRenameAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	if err := c.PatchCollection(ctx, lib, key, patch, col.Version); err != nil {
+	if err := c.PatchCollection(ctx, zotero.OpCollectionRename, lib, key, patch, col.Version); err != nil {
 		return writeFriendly(err)
 	}
 	if mode != output.ModeHuman {
@@ -371,7 +371,7 @@ func collectionMoveAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	if err := c.PatchCollection(ctx, lib, key, patch, col.Version); err != nil {
+	if err := c.PatchCollection(ctx, zotero.OpCollectionMove, lib, key, patch, col.Version); err != nil {
 		return writeFriendly(err)
 	}
 	if mode != output.ModeHuman {
@@ -472,7 +472,7 @@ func collectionDeleteAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return friendly(err)
 	}
-	if err := c.DeleteCollections(ctx, lib, found, version); err != nil {
+	if err := c.DeleteCollections(ctx, zotero.OpCollectionDelete, lib, found, version); err != nil {
 		return writeFriendly(err)
 	}
 	if mode != output.ModeHuman {
