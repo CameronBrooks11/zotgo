@@ -319,16 +319,21 @@ func ensureWriteAuthority(ctx context.Context, cmd *cli.Command, c *zotero.Clien
 	return installLeaseAuthority(c)
 }
 
-// writeIsInteractive reports whether a human answered the confirmation prompt for
-// this write — the only case that needs no lease. A machine-mode write, or one
-// with --yes, is non-interactive.
+// writeIsInteractive reports whether a real human at a terminal answered the
+// confirmation prompt for this write — the only case that needs no lease. Machine
+// mode, --yes, and a piped/redirected stdin (e.g. `echo y | zot …`, the agent
+// idiom) are all non-interactive and must go through a lease, so a scripted "y"
+// cannot install allow-all and slip past the lease and its audit log.
 func writeIsInteractive(cmd *cli.Command, mode output.Mode) bool {
-	return mode == output.ModeHuman && !cmd.Bool("yes")
+	return mode == output.ModeHuman && !cmd.Bool("yes") && isTerminal(os.Stdin)
 }
 
 // authorizeInteractively reuses a persisted local key or prompts the user in
 // Zotero, persisting the key when Zotero remembers it.
 func authorizeInteractively(ctx context.Context, c *zotero.Client) error {
+	if k := loadLocalKey(); k != "" {
+		c.SetLocalKey(k)
+	}
 	if c.HasLocalKey() {
 		return nil
 	}

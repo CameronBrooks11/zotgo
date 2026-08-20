@@ -214,9 +214,10 @@ func newLeaseAuthorizer(l *lease) *leaseAuthorizer {
 // and expiry, records the decision, and returns the dimension-specific refusal
 // (which writeFriendly renders) or nil.
 func (a *leaseAuthorizer) AuthorizeWrite(op zotero.Operation, lib zotero.LibraryRef) error {
-	err := a.lease.authorize(op, lib, a.now())
+	now := a.now()
+	err := a.lease.authorize(op, lib, now)
 	rec := auditRecord{
-		Time:      a.now(),
+		Time:      now,
 		Operation: string(op),
 		Library:   libraryToken(lib),
 		Decision:  "allowed",

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"strings"
 	"testing"
@@ -9,17 +10,61 @@ import (
 	"github.com/CameronBrooks11/zotgo/internal/zotero"
 )
 
-// withNonTTYStdin points os.Stdin at a regular file for the test, so isTerminal
-// reports false deterministically regardless of how `go test` was launched.
-func withNonTTYStdin(t *testing.T) {
+// withStdinContent points os.Stdin at a regular file holding content for the test,
+// so isTerminal reports false (a pipe/redirect, not a terminal) deterministically
+// and prompts read the given bytes.
+func withStdinContent(t *testing.T, content string) {
 	t.Helper()
-	f, err := os.Open(itemInputFile(t, ""))
+	f, err := os.Open(itemInputFile(t, content))
 	if err != nil {
 		t.Fatalf("open stdin stand-in: %v", err)
 	}
 	old := os.Stdin
 	os.Stdin = f
 	t.Cleanup(func() { os.Stdin = old; f.Close() })
+}
+
+// withNonTTYStdin points os.Stdin at an empty regular file, so isTerminal reports
+// false regardless of how `go test` was launched.
+func withNonTTYStdin(t *testing.T) { withStdinContent(t, "") }
+
+// A persisted local key is reused so an interactive write does not re-prompt
+// Zotero's modal on every run. authorizeInteractively must load it, not rely on
+// the in-memory key alone (which is empty in a fresh process).
+func TestAuthorizeInteractivelyReusesPersistedKey(t *testing.T) {
+	t.Setenv("ZOTGO_CONFIG_DIR", t.TempDir())
+	if err := saveLocalKey("PERSISTED"); err != nil {
+		t.Fatalf("saveLocalKey: %v", err)
+	}
+	// An unreachable URL: if the persisted key were ignored, Authorize would dial
+	// it and fail, so success proves the key was reused without re-prompting.
+	c := zotero.New("http://127.0.0.1:0")
+	if err := authorizeInteractively(context.Background(), c); err != nil {
+		t.Fatalf("authorizeInteractively: %v", err)
+	}
+	if c.LocalKey() != "PERSISTED" {
+		t.Errorf("LocalKey = %q, want the reused persisted key", c.LocalKey())
+	}
+}
+
+// A scripted "y" over a pipe is not an interactive human: it must go through the
+// lease path (and thus be refused without one), not install allow-all.
+func TestPipedYesRequiresLease(t *testing.T) {
+	t.Setenv("ZOTGO_CONFIG_DIR", t.TempDir())
+	withStdinContent(t, "y\n")
+	fake := &itemWriteFake{}
+	srv := newItemWriteFake(t, fake)
+	defer srv.Close()
+
+	// Human mode, no --yes: confirm() reads "y" from the pipe, but the write is
+	// still non-interactive, so with no lease it fails closed.
+	_, _, err := runCLI(srv.URL, "item", "delete", "ITEM0001")
+	if err == nil || !strings.Contains(err.Error(), "no active write lease") {
+		t.Fatalf("err = %v, want a no-active-lease refusal for piped 'y'", err)
+	}
+	if fake.deletes.Load() != 0 {
+		t.Errorf("a piped-'y' delete reached Zotero (%d deletes) — allow-all leaked", fake.deletes.Load())
+	}
 }
 
 // grant mints a lease only for an interactive human, so with no terminal it must

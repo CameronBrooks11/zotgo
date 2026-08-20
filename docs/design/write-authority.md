@@ -139,7 +139,7 @@ a time**. Shape:
   "created": "2026-08-20T15:00:00Z",
   "expires": "2026-08-20T15:30:00Z",
   "scope": {
-    "libraries": ["user:8784047"],
+    "libraries": ["user:0"],
     "operations": ["item.create", "item.patch", "attachment.import"]
   },
   "writeKey": "<local write key, bound to this lease>",
@@ -147,9 +147,9 @@ a time**. Shape:
 }
 ```
 
-- `scope.libraries` uses the **canonical** library form (kind + real numeric id),
-  resolved once at mint time — never the `user:0` sentinel, which the Local API
-  accepts on input but never reports back (see [Q6](#q6-canonical-library-identity)).
+- `scope.libraries` uses the **canonical** library token (`kind:id`) derived the
+  same way at mint and enforcement; locally the user library is `user:0`, groups
+  use their real id (see [Q6](#q6-canonical-library-identity)).
 - `scope.operations` is a **closed, per-command vocabulary** (see [Q3](#q3-operation-vocabulary)).
 - `writeKey` binds the credential *into* the lease (see [Bound key](#bound-write-key)),
   so expiry and revocation actually remove write ability.
@@ -242,21 +242,28 @@ alongside the existing `ErrWrite*` sentinels:
 Dimension-specific errors are what let an agent report *which* boundary it hit so
 a human can re-scope.
 
-### Audit — successes and refusals, with a read path
+### Audit — every decision, allowed and refused
 
-Every write **and** every refused/out-of-scope/expired attempt appends to the
-lease's audit log (operation, target keys, outcome); `--dry-run` does not pollute
-it (or is marked `planned`). Recording refusals matters because a burst of them
-is exactly the signal a worried maintainer wants. The audit is *usable*, not just
-present:
+Every authorization decision — allowed **and** refused/out-of-scope/expired —
+appends a record (timestamp, operation, library, decision, and the refusal reason)
+to the lease's audit log. Recording refusals matters because a burst of them is
+exactly the signal a worried maintainer wants. `zot grant status` surfaces it: the
+active lease, its expiry, the audit path, and a decision summary (N allowed, M
+refused). The JSONL file is directly inspectable.
 
-- `zot grant status` prints the active lease, its expiry, the audit path, and a
-  summary (N created / M patched / K deleted / R refused).
-- `zot grant log` renders the JSONL through the existing human/`--json` output
-  machinery.
+Two honest limitations of the phase-1 audit, both planned enrichments rather than
+gaps to hide:
 
-The audit file is same-user-writable, so it is a convenience/forensics record,
-not a tamper-resistant trail — stated plainly so it is not oversold.
+- Records name the *operation and library*, not the individual *target keys* — the
+  authorizer sees the operation and library, not the request body. Adding per-object
+  target keys means threading them to the authorizer and is deferred.
+- A record is written when a write is *authorized*, before the HTTP write; an
+  allowed write can still fail Zotero's own preconditions afterwards, so the summary
+  counts authorization decisions, not confirmed writes. A formatted `zot grant log`
+  and per-write outcomes are a later refinement.
+
+The audit file is same-user-writable, so it is a convenience/forensics record, not
+a tamper-resistant trail — stated plainly so it is not oversold.
 
 ## How existing and pending write commands conform
 
@@ -358,12 +365,17 @@ either way, since a silent re-authorize would equally defeat a per-write modal.
 
 ### <a id="q6-canonical-library-identity"></a>Q6 — Canonical library identity
 
-Pin one canonical library form (`LibraryRef.Kind` + real numeric id, resolved
-once) for both the lease record and the runtime check. The Local API accepts the
-`user:0` sentinel on input but reports the real id, and groups use real ids; a
-lease keyed on `user:0` that fails to match the resolved id is a silent
-fail-open/lockout — the #1 correctness risk called out in `docs/zotero-api.md`.
-Covered by a table test using both the `0` sentinel and the real id.
+Pin **one** canonical library token derived the same way at mint and at
+enforcement, so the two always agree. In phase 1 that token is
+`LibraryRef.Kind:LibraryRef.ID` — and locally the user library's id is the `0`
+sentinel everywhere (routing, `selfUser`, and the lease alike), so both sides read
+`user:0` and match; groups use their real id. The token is never *resolved* from a
+Zotero response, which is where the mismatch risk lives: the Local API accepts `0`
+on input but reports the real id in envelopes, so keying a lease off a response id
+while routing on `0` would be a silent fail-open/lockout — the #1 correctness risk
+in `docs/zotero-api.md`. Real-numeric-id canonicalization only becomes relevant for
+`--web` (phase 3), where the user id is real on both sides. A table test covers the
+`user:0` and group forms.
 
 ## Phased rollout
 
@@ -374,9 +386,9 @@ Covered by a table test using both the `0` sentinel and the real id.
    blast radius; a deny-by-default `WriteAuthorizer` injected into the `Client`
    and enforced at `writeRequest`, applied **only** to non-interactive/`--yes`/
    machine writes; per-command operation scope with fail-closed on any unmapped
-   op; canonical library-identity matching with a `user:0`-vs-real-id table test;
-   dimension-specific refusal sentinels; and an append-only JSONL audit that
-   records successes **and** refusals, surfaced by `grant status` / `grant log`.
+   op; a canonical library token (`user:0` locally — see Q6); dimension-specific
+   refusal sentinels; and an append-only JSONL audit of every decision (allowed and
+   refused), surfaced by `grant status`.
 2. **#52 conforms.** Add `attachment.import` to the vocabulary; unblock and merge.
 3. **`--web` hardening.** Build the `--web` write path, then verify a
    user-supplied library-scoped key (subset check, fail-closed on unmappable

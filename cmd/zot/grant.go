@@ -148,7 +148,9 @@ func grantStatusAction(_ context.Context, cmd *cli.Command) error {
 	if path, err := auditPathFor(l.ID); err == nil {
 		fmt.Fprintf(w, "  audit:      %s\n", path)
 	}
-	fmt.Fprintf(w, "              %d allowed, %d refused\n", allowed, refused)
+	// These count authorization decisions, not confirmed writes — an allowed write
+	// can still fail Zotero's own preconditions afterwards.
+	fmt.Fprintf(w, "              %d allowed, %d refused (authorization decisions)\n", allowed, refused)
 	return nil
 }
 
