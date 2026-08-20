@@ -885,3 +885,22 @@ func TestIsTerminalOnRegularFileIsFalse(t *testing.T) {
 		t.Error("a regular file reported as a terminal")
 	}
 }
+
+// A persisted key must not paper over a read-only build: RequireWriteCapability
+// runs before ensureLocalKey's has-key short-circuit, so a stale key still fails
+// fast rather than reaching the write and 404ing.
+func TestItemWriteWithStaleKeyStillFailsFastWithoutWriteCapability(t *testing.T) {
+	var authorized, wrote atomic.Bool
+	srv := readOnlyBuildServer(t, &authorized, &wrote)
+	defer srv.Close()
+	storeItemWriteKey(t) // persists a key under an isolated ZOTGO_CONFIG_DIR
+	file := itemInputFile(t, `[{"itemType":"book","title":"X"}]`)
+
+	_, _, err := runCLI(srv.URL, "item", "create", "--file", file, "--yes")
+	if err == nil || !strings.Contains(err.Error(), "no local write API") {
+		t.Fatalf("error = %v, want the no-write-API reason despite a persisted key", err)
+	}
+	if wrote.Load() {
+		t.Error("wrote on a read-only build even though a key was persisted")
+	}
+}
