@@ -4,7 +4,10 @@
 **local** endpoint. Writes need a Zotero build with the local write API
 ([zotero/zotero#5015](https://github.com/zotero/zotero/pull/5015)); older builds
 are read-only, and `zot doctor` reports which you have under the `write`
-capability. Writes are refused on `--web`.
+capability. On a build without it, a write fails immediately with that same
+explanation rather than authorizing or reaching the server — but `--dry-run`
+still works, so you can validate payloads against a read-only Zotero. Writes are
+refused on `--web`.
 
 ## Items
 

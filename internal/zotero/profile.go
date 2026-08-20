@@ -139,14 +139,16 @@ func (h Health) localWriteCapability(blocked string) CapabilityStatus {
 	case blocked != "":
 		return CapabilityStatus{Name: CapabilityWrite, Reason: blocked}
 	case h.ServerID == "":
-		return CapabilityStatus{
-			Name:   CapabilityWrite,
-			Reason: "this Zotero build has no local write API (added upstream in zotero/zotero#5015; update Zotero once a release ships it)",
-		}
+		return CapabilityStatus{Name: CapabilityWrite, Reason: LocalWriteUnsupportedReason}
 	default:
 		return CapabilityStatus{Name: CapabilityWrite, Supported: true}
 	}
 }
+
+// LocalWriteUnsupportedReason explains a local endpoint whose Zotero build
+// predates the write API. It is shared by doctor's capability report and the
+// write commands' pre-flight so the two never drift.
+const LocalWriteUnsupportedReason = "this Zotero build has no local write API (added upstream in zotero/zotero#5015; update Zotero once a release ships it)"
 
 // webCapabilities reads reads and writes from the key's grants — the Web API's
 // own statement of what the key may do. Connector ingestion and local-file

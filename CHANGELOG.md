@@ -25,6 +25,17 @@ Planned and outstanding work is tracked in the
   attachment boundary, and `replace` is unavailable when the current or
   resulting attachment is managed.
 
+### Fixed
+
+- Write commands now fail fast on a Zotero build without the local write API,
+  with the same actionable explanation `doctor` gives, instead of printing an
+  untrue "approve the prompt in the app…" line followed by a bewildering
+  `HTTP 404: No endpoint found`. `--dry-run` still works on such a build, so
+  payloads remain checkable against a read-only Zotero.
+- `zot item create` with no `--file` and no piped input no longer blocks
+  silently waiting on the terminal; it explains that it needs `--file` or JSON
+  on stdin.
+
 ## [0.8.0] - 2026-08-13
 
 A symmetric machine-readable contract across every write, streaming reads for

@@ -33,6 +33,9 @@ var (
 	// ErrInvalidAPIKey means the Web API rejected the API key, or it resolved to
 	// no user: it is missing, revoked, or wrong.
 	ErrInvalidAPIKey = errors.New("zotero web api key is invalid")
+	// ErrWriteUnsupported means the local Zotero build has no write API, so a
+	// write cannot succeed. Its message is the actionable reason.
+	ErrWriteUnsupported = errors.New(LocalWriteUnsupportedReason)
 	// ErrAuthorizeDenied means the user declined the local write authorization
 	// prompt in Zotero.
 	ErrAuthorizeDenied = errors.New("zotero write authorization denied")

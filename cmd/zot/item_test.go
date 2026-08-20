@@ -812,3 +812,76 @@ func TestItemCreateHumanDryRunOutputUnchanged(t *testing.T) {
 		t.Fatalf("human output changed:\ngot  %q\nwant %q", got, want)
 	}
 }
+
+// readOnlyBuildServer stands in for a Zotero whose Local API is enabled but has
+// no write endpoints: it never sends the Zotero-Server-ID header. It records any
+// authorize or write attempt so a test can prove the write failed before them.
+func readOnlyBuildServer(t *testing.T, authorized, wrote *atomic.Bool) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/":
+			_, _ = w.Write([]byte(`{}`)) // 200, but no Zotero-Server-ID
+		case r.URL.Path == "/api/local/authorize":
+			authorized.Store(true)
+			w.WriteHeader(http.StatusNotFound)
+		case r.Method != http.MethodGet:
+			wrote.Store(true)
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+}
+
+func TestItemWriteFailsFastWithoutWriteCapability(t *testing.T) {
+	var authorized, wrote atomic.Bool
+	srv := readOnlyBuildServer(t, &authorized, &wrote)
+	defer srv.Close()
+	t.Setenv("ZOTGO_CONFIG_DIR", t.TempDir())
+	file := itemInputFile(t, `[{"itemType":"book","title":"X"}]`)
+
+	_, _, err := runCLI(srv.URL, "item", "create", "--file", file, "--yes")
+	if err == nil || !strings.Contains(err.Error(), "no local write API") || !strings.Contains(err.Error(), "5015") {
+		t.Fatalf("error = %v, want the actionable no-write-API reason", err)
+	}
+	if authorized.Load() {
+		t.Error("authorized on a build with no write API — must fail before the prompt")
+	}
+	if wrote.Load() {
+		t.Error("attempted a write on a build with no write API")
+	}
+}
+
+func TestItemCreateDryRunWorksWithoutWriteCapability(t *testing.T) {
+	var authorized, wrote atomic.Bool
+	srv := readOnlyBuildServer(t, &authorized, &wrote)
+	defer srv.Close()
+	t.Setenv("ZOTGO_CONFIG_DIR", t.TempDir())
+	file := itemInputFile(t, `[{"itemType":"book","title":"X"}]`)
+
+	// If dry-run consulted the write capability it would error on this build;
+	// succeeding proves --dry-run stays usable on a read-only Zotero.
+	got, _, err := runCLI(srv.URL, "--json", "item", "create", "--dry-run", "--file", file)
+	if err != nil {
+		t.Fatalf("dry run on a read-only build: %v", err)
+	}
+	doc := decodeItemMutationDocument(t, got)
+	if len(doc.Data) != 1 || doc.Data[0].Status != "planned" {
+		t.Fatalf("document = %+v", doc)
+	}
+	if authorized.Load() || wrote.Load() {
+		t.Error("dry run authorized or wrote; it must do neither")
+	}
+}
+
+func TestIsTerminalOnRegularFileIsFalse(t *testing.T) {
+	f, err := os.Open(itemInputFile(t, "{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if isTerminal(f) {
+		t.Error("a regular file reported as a terminal")
+	}
+}
