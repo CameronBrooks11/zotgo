@@ -130,6 +130,269 @@ func TestParsePatchInput(t *testing.T) {
 	}
 }
 
+func TestManagedAttachmentPatchSafety(t *testing.T) {
+	managedModes := []string{"imported_file", "imported_url", "embedded_image"}
+	for _, mode := range managedModes {
+		item := mustEnvelope(`{"key":"ATTACH01","data":{"itemType":"attachment","linkMode":"` + mode + `"}}`)
+		for _, field := range attachmentStorageFields {
+			t.Run(mode+"_"+field, func(t *testing.T) {
+				err := validateItemPatchSafety(item, json.RawMessage(`{"`+field+`":"value"}`))
+				if err == nil || !strings.Contains(err.Error(), field) {
+					t.Fatalf("error = %v", err)
+				}
+			})
+		}
+		if err := validateItemPatchSafety(item, json.RawMessage(`{"title":"New title","contentType":"application/pdf"}`)); err != nil {
+			t.Fatalf("metadata patch for %s: %v", mode, err)
+		}
+	}
+
+	for _, mode := range []string{"linked_file", "linked_url"} {
+		item := mustEnvelope(`{"key":"ATTACH02","data":{"itemType":"attachment","linkMode":"` + mode + `"}}`)
+		if err := validateItemPatchSafety(item, json.RawMessage(`{"path":"new location"}`)); err != nil {
+			t.Fatalf("linked mode %s: %v", mode, err)
+		}
+		if err := validateItemPatchSafety(item, json.RawMessage(`{"linkMode":"`+mode+`"}`)); err != nil {
+			t.Fatalf("unchanged linked mode %s: %v", mode, err)
+		}
+	}
+	for _, test := range []struct {
+		name  string
+		item  string
+		patch string
+	}{
+		{name: "linked file to imported file", item: `{"itemType":"attachment","linkMode":"linked_file"}`, patch: `{"linkMode":"imported_file"}`},
+		{name: "linked URL to embedded image", item: `{"itemType":"attachment","linkMode":"linked_url"}`, patch: `{"linkMode":"embedded_image"}`},
+		{name: "between linked modes", item: `{"itemType":"attachment","linkMode":"linked_file"}`, patch: `{"linkMode":"linked_url"}`},
+		{name: "item to managed attachment", item: `{"itemType":"journalArticle"}`, patch: `{"itemType":"attachment","linkMode":"imported_file"}`},
+		{name: "managed attachment to item", item: `{"itemType":"attachment","linkMode":"imported_file"}`, patch: `{"itemType":"journalArticle"}`},
+		{name: "linked attachment to item", item: `{"itemType":"attachment","linkMode":"linked_file"}`, patch: `{"itemType":"journalArticle"}`},
+		{name: "item to linked attachment", item: `{"itemType":"journalArticle"}`, patch: `{"itemType":"attachment","linkMode":"linked_file"}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			item := mustEnvelope(`{"key":"ATTACH02","data":` + test.item + `}`)
+			if err := validateItemPatchSafety(item, json.RawMessage(test.patch)); err == nil {
+				t.Fatal("expected storage-mode transition rejection")
+			}
+		})
+	}
+	for _, data := range []string{
+		`{"itemType":"attachment","linkMode":"future_stored_mode"}`,
+		`{"itemType":"attachment"}`,
+		`{"title":"missing item type"}`,
+	} {
+		item := mustEnvelope(`{"key":"ATTACH03","data":` + data + `}`)
+		if err := validateItemPatchSafety(item, json.RawMessage(`{"path":"new location"}`)); err == nil {
+			t.Fatalf("unsafe item data accepted: %s", data)
+		}
+	}
+	article := mustEnvelope(`{"key":"ITEM0001","data":{"itemType":"journalArticle","title":"Paper"}}`)
+	if err := validateItemPatchSafety(article, json.RawMessage(`{"filename":"ignored.pdf"}`)); err != nil {
+		t.Fatalf("bibliographic item: %v", err)
+	}
+	if err := validateItemPatchSafety(article, json.RawMessage(`{"itemType":"book"}`)); err != nil {
+		t.Fatalf("bibliographic item type change: %v", err)
+	}
+	linked := mustEnvelope(`{"key":"ATTACH04","data":{"itemType":"attachment","linkMode":"linked_file"}}`)
+	for _, patch := range []string{`{"itemType":null}`, `{"linkMode":null}`} {
+		if err := validateItemPatchSafety(linked, json.RawMessage(patch)); err == nil {
+			t.Fatalf("null storage identity accepted: %s", patch)
+		}
+	}
+}
+
+func TestManagedAttachmentReplaceSafety(t *testing.T) {
+	for _, mode := range []string{"imported_file", "imported_url", "embedded_image", "future_stored_mode", ""} {
+		t.Run("current "+mode, func(t *testing.T) {
+			item := mustEnvelope(`{"key":"ATTACH01","data":{"itemType":"attachment","linkMode":"` + mode + `"}}`)
+			err := validateItemReplaceSafety(item, json.RawMessage(`{"itemType":"attachment","linkMode":"linked_file"}`))
+			if err == nil {
+				t.Fatal("expected replacement rejection")
+			}
+		})
+	}
+	for _, test := range []struct {
+		name        string
+		item        string
+		replacement string
+	}{
+		{name: "linked to managed", item: `{"itemType":"attachment","linkMode":"linked_file"}`, replacement: `{"itemType":"attachment","linkMode":"imported_file"}`},
+		{name: "item to managed", item: `{"itemType":"journalArticle"}`, replacement: `{"itemType":"attachment","linkMode":"imported_url"}`},
+		{name: "between linked modes", item: `{"itemType":"attachment","linkMode":"linked_file"}`, replacement: `{"itemType":"attachment","linkMode":"linked_url"}`},
+		{name: "unknown proposed mode", item: `{"itemType":"journalArticle"}`, replacement: `{"itemType":"attachment","linkMode":"future_mode"}`},
+		{name: "managed attachment to item", item: `{"itemType":"attachment","linkMode":"imported_file"}`, replacement: `{"itemType":"journalArticle"}`},
+		{name: "linked attachment to item", item: `{"itemType":"attachment","linkMode":"linked_file"}`, replacement: `{"itemType":"journalArticle"}`},
+		{name: "item to linked attachment", item: `{"itemType":"journalArticle"}`, replacement: `{"itemType":"attachment","linkMode":"linked_file"}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			item := mustEnvelope(`{"key":"ATTACH02","data":` + test.item + `}`)
+			if err := validateItemReplaceSafety(item, json.RawMessage(test.replacement)); err == nil {
+				t.Fatal("expected replacement rejection")
+			}
+		})
+	}
+	for _, test := range []struct {
+		name        string
+		item        string
+		replacement string
+	}{
+		{name: "linked file", item: `{"itemType":"attachment","linkMode":"linked_file"}`, replacement: `{"itemType":"attachment","linkMode":"linked_file","path":"attachments/new.pdf"}`},
+		{name: "linked URL", item: `{"itemType":"attachment","linkMode":"linked_url"}`, replacement: `{"itemType":"attachment","linkMode":"linked_url","url":"https://example.test"}`},
+		{name: "bibliographic item", item: `{"itemType":"journalArticle"}`, replacement: `{"itemType":"book","title":"Book"}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			item := mustEnvelope(`{"key":"ITEM0001","data":` + test.item + `}`)
+			if err := validateItemReplaceSafety(item, json.RawMessage(test.replacement)); err != nil {
+				t.Fatalf("allowed replacement: %v", err)
+			}
+		})
+	}
+}
+
+func TestManagedAttachmentUnsafeUpdatesStopAfterRead(t *testing.T) {
+	operations := []struct {
+		name    string
+		command string
+		input   string
+	}{
+		{name: "patch filename", command: "patch", input: `{"filename":"new.pdf"}`},
+		{name: "patch path", command: "patch", input: `{"path":"storage:new.pdf"}`},
+		{name: "patch link mode", command: "patch", input: `{"linkMode":"linked_file"}`},
+		{name: "patch item type", command: "patch", input: `{"itemType":"journalArticle"}`},
+		{name: "replace", command: "replace", input: `{"itemType":"attachment","title":"New title"}`},
+	}
+	modes := []struct {
+		name   string
+		before []string
+		after  []string
+	}{
+		{name: "human yes", after: []string{"--yes"}},
+		{name: "human dry run", after: []string{"--dry-run"}},
+		{name: "JSON dry run", before: []string{"--json"}, after: []string{"--dry-run"}},
+		{name: "JSONL dry run", before: []string{"--jsonl"}, after: []string{"--dry-run"}},
+	}
+	for _, op := range operations {
+		for _, mode := range modes {
+			t.Run(op.name+"_"+mode.name, func(t *testing.T) {
+				t.Setenv("ZOTGO_CONFIG_DIR", t.TempDir())
+				var requests []string
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					requests = append(requests, r.Method+" "+r.URL.Path)
+					if r.Method == http.MethodGet && r.URL.Path == "/api/users/0/items/ATTACH01" {
+						_, _ = w.Write([]byte(`{"key":"ATTACH01","version":7,"data":{"itemType":"attachment","linkMode":"imported_file","filename":"old.pdf"}}`))
+						return
+					}
+					w.WriteHeader(http.StatusInternalServerError)
+				}))
+				defer srv.Close()
+
+				file := itemInputFile(t, op.input)
+				args := append([]string{}, mode.before...)
+				args = append(args, "item", op.command, "ATTACH01", "--file", file)
+				args = append(args, mode.after...)
+				stdout, _, err := runCLI(srv.URL, args...)
+				if err == nil {
+					t.Fatal("expected update rejection")
+				}
+				if stdout != "" {
+					t.Fatalf("stdout = %q", stdout)
+				}
+				if got := strings.Join(requests, ","); got != "GET /api/users/0/items/ATTACH01" {
+					t.Fatalf("requests = %s", got)
+				}
+			})
+		}
+	}
+}
+
+func TestManagedAttachmentTransitionsStopAfterRead(t *testing.T) {
+	for _, test := range []struct {
+		command string
+		input   string
+	}{
+		{command: "patch", input: `{"linkMode":"imported_file"}`},
+		{command: "replace", input: `{"itemType":"attachment","linkMode":"imported_file","filename":"paper.pdf"}`},
+	} {
+		t.Run(test.command, func(t *testing.T) {
+			t.Setenv("ZOTGO_CONFIG_DIR", t.TempDir())
+			var requests []string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests = append(requests, r.Method+" "+r.URL.Path)
+				if r.Method == http.MethodGet && r.URL.Path == "/api/users/0/items/ATTACH01" {
+					_, _ = w.Write([]byte(`{"key":"ATTACH01","version":7,"data":{"itemType":"attachment","linkMode":"linked_file","path":"attachments/paper.pdf"}}`))
+					return
+				}
+				w.WriteHeader(http.StatusInternalServerError)
+			}))
+			defer srv.Close()
+
+			file := itemInputFile(t, test.input)
+			stdout, _, err := runCLI(srv.URL, "--json", "item", test.command, "ATTACH01", "--file", file, "--dry-run")
+			if err == nil {
+				t.Fatal("expected managed-mode transition rejection")
+			}
+			if stdout != "" {
+				t.Fatalf("stdout = %q", stdout)
+			}
+			if got := strings.Join(requests, ","); got != "GET /api/users/0/items/ATTACH01" {
+				t.Fatalf("requests = %s", got)
+			}
+		})
+	}
+}
+
+func TestAllowedAttachmentPatchesReachWrite(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		itemData string
+		patch    string
+	}{
+		{name: "managed metadata", itemData: `{"itemType":"attachment","linkMode":"imported_file","filename":"old.pdf","title":"Old title"}`, patch: `{"title":"New title","contentType":"application/pdf"}`},
+		{name: "linked path", itemData: `{"itemType":"attachment","linkMode":"linked_file","path":"attachments/old.pdf"}`, patch: `{"path":"attachments/new.pdf"}`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			storeItemWriteKey(t)
+			var requests []string
+			var patchBody string
+			var versionHeader string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Zotero-Server-ID", "attachment-patch-test")
+				requests = append(requests, r.Method+" "+r.URL.Path)
+				switch {
+				case r.Method == http.MethodGet && r.URL.Path == "/api/users/0/items/ATTACH01":
+					_, _ = w.Write([]byte(`{"key":"ATTACH01","version":7,"data":` + tt.itemData + `}`))
+				case r.Method == http.MethodPatch && r.URL.Path == "/api/users/0/items/ATTACH01":
+					body, err := io.ReadAll(r.Body)
+					if err != nil {
+						t.Fatal(err)
+					}
+					patchBody = string(body)
+					versionHeader = r.Header.Get("If-Unmodified-Since-Version")
+					w.WriteHeader(http.StatusNoContent)
+				default:
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+			}))
+			defer srv.Close()
+
+			file := itemInputFile(t, tt.patch)
+			stdout, _, err := runCLI(srv.URL, "item", "patch", "ATTACH01", "--file", file, "--yes")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Join(requests, ","); got != "GET /api/users/0/items/ATTACH01,PATCH /api/users/0/items/ATTACH01" {
+				t.Fatalf("requests = %s", got)
+			}
+			if patchBody != tt.patch || versionHeader != "7" {
+				t.Fatalf("body = %s, version = %q", patchBody, versionHeader)
+			}
+			if !strings.Contains(stdout, "patched ATTACH01") {
+				t.Fatalf("stdout = %q", stdout)
+			}
+		})
+	}
+}
+
 func TestPatchFields_Sorted(t *testing.T) {
 	got := patchFields(json.RawMessage(`{"title":"a","abstractNote":"b","date":"c"}`))
 	if strings.Join(got, ",") != "abstractNote,date,title" {
