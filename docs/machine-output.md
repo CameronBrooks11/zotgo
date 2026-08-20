@@ -24,9 +24,10 @@ for every command, so a script learns it once:
 ```
 
 `kind` says what `data` holds: `items`, `item`, `attachment`,
-`attachment-import`, `note`, `relations`, `relation`, `collections`,
-`collection`, `stats`, `health`, or one of the mutation kinds (`item-mutations`,
-`collection-mutations`, `tag-mutations`, and their singular `*-mutation` forms
+`attachment-import`, `annotations`, `annotation`, `note`, `relations`,
+`relation`, `collections`, `collection`, `stats`, `health`, or one of the mutation
+kinds (`item-mutations`, `collection-mutations`, `tag-mutations`, and their
+singular `*-mutation` forms
 under `--jsonl`). A `health` document carries `endpoint` and `capabilities`, so a
 script can check for `write` support rather than assume it. `schema` is bumped
 only when a field changes meaning or disappears — new fields may appear at any
@@ -99,6 +100,18 @@ pagination and backoff. It rejects `--raw` before making a request because a
 resolved path is derived from multiple collection records rather than one Zotero
 response.
 
+### Annotations
+
+`zot --json annotation list ATTACHMENT_KEY` emits an `annotations` document in
+document order; JSONL emits one `annotation` document per line. Each record has
+exactly `key`, `attachmentKey`, `type`, `pageLabel`, `color`, `sortIndex`,
+`hasText`, and `hasComment`. Text and comment bodies, position data, image bytes,
+and Zotero versions are excluded from the stable listing contract.
+
+The command buffers every child page before emission. `--raw` composes the
+complete Zotero annotation envelopes into one array in server order, retaining
+unknown fields and private bodies without adding a schema wrapper.
+
 ### Attachments
 
 `zot --json attachment show ATTACHMENT_KEY` emits one `attachment` record.
@@ -145,8 +158,9 @@ note record.
 
 ### No `version` field
 
-Items, collections, attachment, and note records carry **no `version`**. A Zotero
-object version belongs to the endpoint that issued it, and the Local API's has
+Items, collections, attachment, note, and annotation records carry
+**no `version`**. A Zotero object version belongs to the endpoint that issued it,
+and the Local API's has
 no meaning zotgo can promise:
 it is the *server* version, so it does not move when you edit an item locally
 without syncing, and the local write API replaces it with an unrelated local
