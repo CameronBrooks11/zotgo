@@ -24,8 +24,9 @@ for every command, so a script learns it once:
 ```
 
 `kind` says what `data` holds: `items`, `item`, `attachment`, `note`,
-`collections`, `collection`, `stats`, `health`, or one of the mutation kinds (`item-mutations`,
-`collection-mutations`, `tag-mutations`, and their singular `*-mutation` forms
+`relations`, `relation`, `collections`, `collection`, `stats`, `health`, or one
+of the mutation kinds (`item-mutations`, `collection-mutations`,
+`tag-mutations`, and their singular `*-mutation` forms
 under `--jsonl`). A `health` document carries `endpoint` and `capabilities`, so a
 script can check for `write` support rather than assume it. `schema` is bumped
 only when a field changes meaning or disappears — new fields may appear at any
@@ -71,6 +72,18 @@ separators are synthesized by zotgo, while every embedded item envelope retains
 Zotero's fields and scalar representations. Raw `show` validates and buffers all
 pages before writing, so a malformed or failed later page produces no partial
 stdout.
+
+### Relations
+
+`zot --json relation list ITEM_KEY` emits a `relations` document in stable
+predicate/target order; JSONL emits one `relation` document per edge. Every
+record includes the source `itemKey`, predicate, and complete target URI. The
+target URI is authoritative. `targetKey` is only a convenience and appears when
+the target is a strict Zotero user, local-user, or group item URI.
+
+`--raw` emits the complete source item envelope after validating its identity.
+It does not shape the `relations` field, so malformed or future relation data
+remains available through the raw escape hatch.
 
 ### Attachments
 

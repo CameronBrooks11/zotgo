@@ -128,6 +128,15 @@ type Note struct {
 	HTML         string `json:"html"`
 }
 
+// Relation is one outgoing edge from a Zotero item. Target is authoritative;
+// TargetKey is present only when Target is a strict Zotero item URI.
+type Relation struct {
+	ItemKey   string `json:"itemKey"`
+	Predicate string `json:"predicate"`
+	Target    string `json:"target"`
+	TargetKey string `json:"targetKey,omitempty"`
+}
+
 // Attachment is one attachment's stable metadata.
 type Attachment struct {
 	Key          string               `json:"key"`
@@ -300,6 +309,20 @@ func NewNote(note zotero.Note) Note {
 		Tags:         tags,
 		HTML:         note.HTML,
 	}
+}
+
+// NewRelations converts outgoing edges to the stable output contract.
+func NewRelations(itemKey string, relations []zotero.Relation) []Relation {
+	records := make([]Relation, 0, len(relations))
+	for _, relation := range relations {
+		records = append(records, Relation{
+			ItemKey:   itemKey,
+			Predicate: relation.Predicate,
+			Target:    relation.Target,
+			TargetKey: relation.TargetKey,
+		})
+	}
+	return records
 }
 
 // NewAttachment converts attachment metadata to the stable output contract.

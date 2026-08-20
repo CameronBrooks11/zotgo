@@ -12,6 +12,7 @@ zot search algae --everything  # include full text and notes
 zot show HRAC4E44              # one item with all direct attachments and notes
 zot attachment show ABCD1234   # attachment metadata
 zot note show NOTE1234         # one note with exact rich-text HTML
+zot relation list HRAC4E44     # one item's outgoing relations
 zot collections               # collections as a tree (--flat for a list)
 zot stats                     # library-wide counts
 ```
@@ -36,6 +37,14 @@ single-item envelope.
 rich-text HTML exactly as stored. Standalone notes have no parent. The command
 does not sanitize the HTML or derive plain text; use `--raw` for the complete
 single-item envelope.
+
+## Relations
+
+`zot relation list ITEM_KEY` reports the item's outgoing relation predicates and
+complete target URIs. Stable machine records add `targetKey` only for strict
+Zotero item URIs; the full URI remains authoritative because it identifies the
+target library as well as the item. Use `--raw` for the complete source item
+envelope.
 
 ## Export
 

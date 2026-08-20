@@ -18,6 +18,8 @@ Planned and outstanding work is tracked in the
   item-type validation.
 - `zot note show KEY` returns one note's metadata and exact rich-text HTML;
   `--raw` preserves the complete Zotero item envelope.
+- `zot relation list KEY` reports one item's outgoing relations with stable
+  predicate and target records; `--raw` preserves the complete parent envelope.
 
 ### Changed
 
