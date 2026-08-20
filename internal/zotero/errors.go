@@ -54,6 +54,10 @@ var (
 	// the Zotero-Server-ID no longer matches, or the library changed since the
 	// version the write was based on.
 	ErrPreconditionFailed = errors.New("zotero write precondition failed")
+	// ErrWriteOutcomeUnknown means Zotero accepted a mutating request but its
+	// successful response could not be decoded, so the created object's key is
+	// unavailable and retrying might duplicate data.
+	ErrWriteOutcomeUnknown = errors.New("zotero write outcome is unknown")
 )
 
 // StatusError preserves an unexpected non-2xx response from Zotero.

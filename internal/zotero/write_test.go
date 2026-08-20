@@ -7,7 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"testing/iotest"
 )
 
 // writeTestClient is New with an allow-all WriteAuthorizer installed, for tests
@@ -280,6 +282,79 @@ func TestCreateItems_PostsBatchAndParses(t *testing.T) {
 	}
 	if !r.Ok() || r.Successful["0"].Key != "NEWKEY01" {
 		t.Errorf("result = %+v", r)
+	}
+}
+
+func TestCreateItemsReturningKeysIgnoresUnrelatedEnvelopeFields(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.Header().Set("Zotero-Server-ID", "SERVERID1234")
+			return
+		}
+		_, _ = w.Write([]byte(`{
+			"successful":{"0":{"key":"ATTACH01","links":{"enclosure":{"href":false}}}},
+			"unchanged":{"1":"OLDKEY02"},
+			"failed":{"2":{"key":"BADKEY03","code":400,"message":"bad item"}}
+		}`))
+	}))
+	defer srv.Close()
+	client := New(srv.URL)
+	client.SetLocalKey("key")
+	result, err := client.CreateItemsReturningKeys(context.Background(), UserLibrary(), []json.RawMessage{
+		json.RawMessage(`{"itemType":"attachment","linkMode":"imported_file"}`),
+	})
+	if err != nil {
+		t.Fatalf("CreateItemsReturningKeys: %v", err)
+	}
+	if result.Successful["0"] != "ATTACH01" || result.Unchanged["1"] != "OLDKEY02" || result.Failed["2"].Code != 400 {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestParseKeyWriteResultRejectsMissingSuccessfulKey(t *testing.T) {
+	if _, err := parseKeyWriteResult([]byte(`{"successful":{"0":{"links":{}}}}`)); err == nil {
+		t.Fatal("missing successful key accepted")
+	}
+}
+
+func TestCreateItemsReturningKeysMarksSuccessfulBodyReadFailureUnknown(t *testing.T) {
+	httpClient := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		body := io.MultiReader(strings.NewReader(`{"successful":`), iotest.ErrReader(io.ErrUnexpectedEOF))
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(body),
+		}, nil
+	})}
+	client := New("http://local.test", WithHTTPClient(httpClient))
+	client.SetLocalKey("key")
+	header := make(http.Header)
+	header.Set("Zotero-Server-ID", "SERVERID1234")
+	client.captureServerID(header)
+	_, err := client.CreateItemsReturningKeys(context.Background(), UserLibrary(), []json.RawMessage{
+		json.RawMessage(`{"itemType":"attachment","linkMode":"imported_file"}`),
+	})
+	if !errors.Is(err, ErrWriteOutcomeUnknown) {
+		t.Fatalf("error = %v, want ErrWriteOutcomeUnknown", err)
+	}
+}
+
+func TestCreateItemsReturningKeysMarksMalformedSuccessUnknown(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.Header().Set("Zotero-Server-ID", "SERVERID1234")
+			return
+		}
+		_, _ = w.Write([]byte(`{"successful":`))
+	}))
+	defer srv.Close()
+	client := New(srv.URL)
+	client.SetLocalKey("key")
+	_, err := client.CreateItemsReturningKeys(context.Background(), UserLibrary(), []json.RawMessage{
+		json.RawMessage(`{"itemType":"attachment","linkMode":"imported_file"}`),
+	})
+	if !errors.Is(err, ErrWriteOutcomeUnknown) {
+		t.Fatalf("error = %v, want ErrWriteOutcomeUnknown", err)
 	}
 }
 

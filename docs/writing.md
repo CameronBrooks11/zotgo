@@ -52,6 +52,44 @@ exposing raw item input or Zotero versions. Non-dry-run machine writes require
 item writes because their result is a zotgo-derived mutation report, not one raw
 Zotero response.
 
+## Managed attachments
+
+```bash
+zot attachment import \
+  --parent ITEMKEY \
+  --file figure.png \
+  --title "Figure 1" \
+  --source-url https://example.org/figure.png
+```
+
+`attachment import` attaches one non-empty regular file to an existing
+bibliographic parent. It copies a stable snapshot into private staging, creates
+`imported_file` metadata, uploads those exact bytes to Zotero, registers the
+managed file, and verifies the parent, title, source URL, filename, media type,
+MD5, and byte length. `--source-url` stores provenance only; zotgo never
+downloads it.
+
+The media type comes from the first 512 staged bytes, not the extension.
+`--content-type` supplies a concrete MIME override, and `--filename` changes the
+managed filename. Imports are capped at 128 MiB because Zotero's current Local
+API receiver buffers each upload before staging it. Standard input, directories,
+and special files are not accepted.
+
+Before writing, zotgo checks every direct attachment child. An exact MD5 match
+is a successful no-op unless `--allow-duplicate` is set. The check is best-effort
+rather than atomic because Zotero has no create-unless-this-parent-has-no-
+matching-checksum precondition.
+
+Import has separate metadata, authorization, byte-upload, registration, and
+verification phases. If a phase after metadata creation fails, stable output
+reports the attachment key, last completed stage, and a bounded failure without
+deleting anything automatically. `--raw` is unavailable because no single
+Zotero response represents the operation.
+
+Generic `item create` does not ingest local bytes. For a new `imported_file`
+item it rejects local `path` and premature `filename` fields and directs the user
+to `attachment import`; metadata-only creates produce a warning.
+
 ## Collections
 
 ```bash
@@ -96,7 +134,9 @@ There are two ways a write is authorized, matched to who is driving it.
 are their own authority. The first such write prompts for approval in Zotero.
 Choosing **Always Allow** stores a local API key in `~/.config/zotgo/local-api-key`
 (mode `0600`) so later interactive writes don't re-prompt; **Allow** grants a
-single-use key.
+single-use key. Interactive `attachment import` requires **Always Allow**, because
+it performs several authenticated phases and a single-use key would be spent on the
+first.
 
 **Non-interactive writes** — anything with `--yes`, or machine output
 (`--json`/`--jsonl`) — require a **write lease**, so an agent's blast radius is
@@ -131,6 +171,6 @@ Local API has no remote revoke. See
 [the design doc](design/write-authority.md) for the full model and threat
 boundaries.
 
-Writes carry Zotero's required `Zotero-Server-ID` and `If-Unmodified-Since-Version`
-preconditions, so if the library changed since the command read it, the write is
-rejected and reported rather than silently overwriting.
+Writes carry Zotero's required `Zotero-Server-ID` and operation-specific
+preconditions, so concurrent or mismatched writes are rejected and reported
+rather than silently overwriting.

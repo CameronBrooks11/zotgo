@@ -197,14 +197,35 @@ writes until we can run against a Zotero built with these commits.
   Optional on reads, **required on writes** (missing → 428 Precondition Required;
   mismatch → 412 Precondition Failed). Its *presence on a read* is the clean
   probe signal that this Zotero has the write API at all.
-- **`If-Unmodified-Since-Version`** required on writes, checked against the
-  library's `clientVersion` (mismatch → 412 with expected/found). `?since=` and
-  `If-Modified-Since-Version` gate reads. `Last-Modified-Version` on responses.
+- **`If-Unmodified-Since-Version`** guards updates and deletes against the
+  library's `clientVersion` (mismatch -> 412 with expected/found). New batch
+  creates have no prior object to guard. File uploads instead use
+  `If-None-Match: *`. `?since=` and `If-Modified-Since-Version` gate reads;
+  writes return `Last-Modified-Version` where applicable.
 
 **Response shapes** (identical to Web API v3, so the parser is shared):
 - Batch → 200 `{"successful":{"<i>":<obj>}, "success":{…}, "unchanged":{"<i>":"<key>"},
   "failed":{"<i>":{"key","code","message"}}}`.
-- Single `PUT`/`PATCH`/`DELETE` → 204. File registration → 201.
+- Single `PUT`/`PATCH`/`DELETE` -> 204. File registration -> 204.
+
+**Managed attachment files** use the API-v3 full-upload contract for an existing
+`imported_file` attachment. zotgo first creates attachment metadata without
+`filename`, `path`, `md5`, or `mtime`, then:
+
+1. Authenticated form POST to `/api/.../items/:key/file` with MD5, a bare
+   filename, byte length, millisecond mtime, media type, and
+   `If-None-Match: *`. `{"exists":1}` means Zotero already has those bytes.
+2. When upload is needed, stream the staged bytes without API credentials to the
+   returned exact same-origin `/api/local/uploads/:uploadKey` URL. The receiver
+   verifies MD5 and returns 201. Redirects are not followed.
+3. Authenticated form POST of `upload=:uploadKey` to the item file route; success
+   is 204.
+
+A focused item read then verifies the parent, `imported_file` link mode,
+requested and actual filename, media type, MD5, and enclosure length. This is a
+Local API workflow, not Connector ingestion: it targets an explicit existing
+bibliographic parent. zotgo caps each import at 128 MiB while Zotero's Local API
+receiver buffers the request before staging it.
 
 **Versioning is endpoint-scoped, in Zotero's own words:** *"Local API versions
 have no relation to Web API versions, nor … to local API versions returned by

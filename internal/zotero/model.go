@@ -234,8 +234,32 @@ type Library struct {
 type Link struct {
 	Href           string `json:"href"`
 	Type           string `json:"type"`
+	Title          string `json:"title"`
+	Length         *int64 `json:"length"`
 	AttachmentType string `json:"attachmentType"`
 	AttachmentSize int64  `json:"attachmentSize"`
+}
+
+// UnmarshalJSON accepts href:false, which Zotero uses for an imported_file
+// attachment whose metadata exists but whose managed bytes are not registered.
+func (l *Link) UnmarshalJSON(data []byte) error {
+	type link Link
+	decoded := struct {
+		Href json.RawMessage `json:"href"`
+		*link
+	}{link: (*link)(l)}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	l.Href = ""
+	switch strings.TrimSpace(string(decoded.Href)) {
+	case "", "null", "false":
+		return nil
+	}
+	if err := json.Unmarshal(decoded.Href, &l.Href); err != nil {
+		return fmt.Errorf("link href: expected a string or false: %w", err)
+	}
+	return nil
 }
 
 // ItemData contains the stable item fields zotgo needs for display and tests.
@@ -420,7 +444,7 @@ func DecodeAttachment(raw json.RawMessage) (Attachment, error) {
 		Key   string          `json:"key"`
 		Data  json.RawMessage `json:"data"`
 		Links struct {
-			Enclosure *AttachmentEnclosure `json:"enclosure"`
+			Enclosure json.RawMessage `json:"enclosure"`
 		} `json:"links"`
 	}
 	if err := json.Unmarshal(raw, &item); err != nil {
@@ -430,7 +454,17 @@ func DecodeAttachment(raw json.RawMessage) (Attachment, error) {
 	if err != nil {
 		return Attachment{}, err
 	}
-	attachment.Enclosure = item.Links.Enclosure
+	if raw := strings.TrimSpace(string(item.Links.Enclosure)); raw != "" && raw != "null" {
+		var link Link
+		if err := json.Unmarshal(item.Links.Enclosure, &link); err != nil {
+			return Attachment{}, fmt.Errorf("attachment %s enclosure: %w", item.Key, err)
+		}
+		if link.Href != "" {
+			attachment.Enclosure = &AttachmentEnclosure{
+				Href: link.Href, Type: link.Type, Title: link.Title, Length: link.Length,
+			}
+		}
+	}
 	return attachment, nil
 }
 
