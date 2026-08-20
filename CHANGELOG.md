@@ -20,6 +20,8 @@ Planned and outstanding work is tracked in the
   `--raw` preserves the complete Zotero item envelope.
 - `zot relation list KEY` reports one item's outgoing relations with stable
   predicate and target records; `--raw` preserves the complete parent envelope.
+- `zot collection path KEY...` resolves complete root-to-leaf collection
+  ancestry while preserving requested key order and duplicates.
 
 ### Changed
 

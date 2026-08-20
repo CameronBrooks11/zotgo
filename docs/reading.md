@@ -13,12 +13,21 @@ zot show HRAC4E44              # one item with all direct attachments and notes
 zot attachment show ABCD1234   # attachment metadata
 zot note show NOTE1234         # one note with exact rich-text HTML
 zot relation list HRAC4E44     # one item's outgoing relations
+zot collection path COLL1234   # root-to-leaf collection ancestry
 zot collections               # collections as a tree (--flat for a list)
 zot stats                     # library-wide counts
 ```
 
 Global flags: `--library`/`-L` selects a group library (by name or id; default is
 My Library), and `--url` overrides the endpoint address.
+
+## Collection paths
+
+`zot collection path KEY...` resolves one or more collection keys from root to
+leaf, preserving argument order and duplicates. Stable machine output carries an
+unambiguous `path` array of key/name segments. Human output joins names for
+reading only. The command uses the complete paginated collection index and
+rejects `--raw` because its result is derived from multiple records.
 
 ## Attachments
 

@@ -111,6 +111,11 @@ func TestLiveWebDoctorIsProbeDerived(t *testing.T) {
 	t.Logf("web capabilities: %+v", h.Capabilities())
 }
 
+func TestLiveWebCollectionPaths(t *testing.T) {
+	client, library := liveWebClient(t)
+	assertLiveCollectionPath(t, client, library)
+}
+
 func TestLiveWebNotFound(t *testing.T) {
 	c, me := liveWebClient(t)
 	if _, err := c.Item(context.Background(), me, "ZZZZZZZZ"); err != ErrNotFound {
