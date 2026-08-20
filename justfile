@@ -48,7 +48,7 @@ test-live:
 # Report known vulnerabilities reachable from our code. Stdlib findings track
 # the toolchain that builds them, so run this on a current Go.
 vuln:
-    go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+    go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
 
 # Build the zot binary into ./bin
 build:
