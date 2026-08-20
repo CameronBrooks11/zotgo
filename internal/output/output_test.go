@@ -157,8 +157,8 @@ func TestNewCollection(t *testing.T) {
 	}
 	got := NewCollection(e)
 	want := Collection{Key: "COLL0002", Name: "Polyhedra", ParentKey: "COLL0001", NumItems: 9}
-	if got != want {
-		t.Fatalf("got %+v, want %+v", got, want)
+	if got.Key != want.Key || got.Name != want.Name || got.ParentKey != want.ParentKey || got.NumItems != want.NumItems || got.Path != nil {
+		t.Fatalf("got %+v, want %+v with no path", got, want)
 	}
 }
 

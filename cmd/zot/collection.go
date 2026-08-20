@@ -18,8 +18,9 @@ import (
 func collectionCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "collection",
-		Usage: "create, rename, and delete collections (local endpoint only)",
+		Usage: "inspect and modify collections",
 		Commands: []*cli.Command{
+			collectionPathCommand(),
 			collectionCreateCommand(),
 			collectionRenameCommand(),
 			collectionMoveCommand(),

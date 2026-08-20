@@ -85,6 +85,20 @@ the target is a strict Zotero user, local-user, or group item URI.
 It does not shape the `relations` field, so malformed or future relation data
 remains available through the raw escape hatch.
 
+### Collection paths
+
+`zot --json collection path KEY...` emits a `collections` document in requested
+key order. Each ordinary collection record gains a `path` array of `{key,name}`
+segments from root to leaf; JSONL emits the same records individually with
+`kind: "collection"`. The segment array is the stable ancestry contract. Joined
+names shown to humans are presentation only, since collection names can contain
+path-like punctuation.
+
+The command fetches the complete collection index once and follows normal API
+pagination and backoff. It rejects `--raw` before making a request because a
+resolved path is derived from multiple collection records rather than one Zotero
+response.
+
 ### Attachments
 
 `zot --json attachment show ATTACHMENT_KEY` emits one `attachment` record.

@@ -171,10 +171,17 @@ type AttachmentEnclosure struct {
 // Collection is one collection, with its parent's key when nested. It carries no
 // version, for the reasons given on Item.
 type Collection struct {
-	Key       string `json:"key"`
-	Name      string `json:"name"`
-	ParentKey string `json:"parentKey,omitempty"`
-	NumItems  int    `json:"numItems"`
+	Key       string                  `json:"key"`
+	Name      string                  `json:"name"`
+	ParentKey string                  `json:"parentKey,omitempty"`
+	NumItems  int                     `json:"numItems"`
+	Path      []CollectionPathSegment `json:"path,omitempty"`
+}
+
+// CollectionPathSegment identifies one collection in a root-to-leaf path.
+type CollectionPathSegment struct {
+	Key  string `json:"key"`
+	Name string `json:"name"`
 }
 
 // Stats holds library-wide counts.

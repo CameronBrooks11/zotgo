@@ -9,6 +9,7 @@
 package zotero
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -118,6 +119,63 @@ func TestLiveRelationsMatchItemData(t *testing.T) {
 		return
 	}
 	t.Skip("no relations in the first 100 user-library items")
+}
+
+func TestLiveCollectionPathsMatchCollectionData(t *testing.T) {
+	assertLiveCollectionPath(t, liveClient(t), UserLibrary())
+}
+
+func assertLiveCollectionPath(t *testing.T, client *Client, library LibraryRef) {
+	t.Helper()
+	collections, err := client.AllCollections(context.Background(), library, CollectionsOptions{})
+	if err != nil {
+		t.Fatalf("AllCollections: %v", err)
+	}
+	if len(collections) == 0 {
+		t.Skip("no collections to exercise")
+	}
+	type collectionData struct {
+		Key              string          `json:"key"`
+		Name             string          `json:"name"`
+		ParentCollection json.RawMessage `json:"parentCollection"`
+	}
+	byKey := make(map[string]collectionData, len(collections))
+	requested := collections[0].Key
+	for _, envelope := range collections {
+		var data collectionData
+		if err := json.Unmarshal(envelope.Data, &data); err != nil {
+			t.Fatalf("decode collection %s independently: %v", envelope.Key, err)
+		}
+		byKey[envelope.Key] = data
+		var parent string
+		if json.Unmarshal(data.ParentCollection, &parent) == nil && parent != "" {
+			requested = envelope.Key
+		}
+	}
+	paths, err := ResolveCollectionPaths(collections, []string{requested})
+	if err != nil {
+		t.Fatalf("ResolveCollectionPaths(%s): %v", requested, err)
+	}
+	if len(paths) != 1 || len(paths[0].Segments) == 0 || paths[0].Segments[len(paths[0].Segments)-1].Key != requested {
+		t.Fatalf("path = %#v", paths)
+	}
+	for i, segment := range paths[0].Segments {
+		data, ok := byKey[segment.Key]
+		if !ok || data.Name != segment.Name {
+			t.Fatalf("segment %d does not match independent collection data: %#v", i, segment)
+		}
+		if i == 0 {
+			if !bytes.Equal(bytes.TrimSpace(data.ParentCollection), []byte("false")) {
+				t.Fatalf("first segment %q is not a root: parent=%s", segment.Key, data.ParentCollection)
+			}
+			continue
+		}
+		var parent string
+		if err := json.Unmarshal(data.ParentCollection, &parent); err != nil || parent != paths[0].Segments[i-1].Key {
+			t.Fatalf("segment %q parent = %q/%v, want %q", segment.Key, parent, err, paths[0].Segments[i-1].Key)
+		}
+	}
+	t.Logf("collection %s: checked %d path segments", requested, len(paths[0].Segments))
 }
 
 func TestLiveNotFound(t *testing.T) {
