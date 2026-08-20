@@ -175,6 +175,22 @@ func (c *Client) rawItemPage(ctx context.Context, library LibraryRef, key string
 	return json.RawMessage(body), page, nil
 }
 
+// Note reads and decodes one note's bounded metadata and rich-text HTML.
+func (c *Client) Note(ctx context.Context, library LibraryRef, key string) (Note, error) {
+	raw, err := c.RawItem(ctx, library, key)
+	if err != nil {
+		return Note{}, err
+	}
+	if err := RequireItemType(raw, "note"); err != nil {
+		return Note{}, fmt.Errorf("decode note %q: %w", key, err)
+	}
+	note, err := DecodeNote(raw)
+	if err != nil {
+		return Note{}, fmt.Errorf("decode note %q: %w", key, err)
+	}
+	return note, nil
+}
+
 // Attachment reads and decodes one attachment's bounded metadata.
 func (c *Client) Attachment(ctx context.Context, library LibraryRef, key string) (Attachment, error) {
 	raw, err := c.RawItem(ctx, library, key)

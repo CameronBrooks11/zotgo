@@ -11,6 +11,7 @@ zot search "state estimation"  # search by title/creator/year
 zot search algae --everything  # include full text and notes
 zot show HRAC4E44              # one item with all direct attachments and notes
 zot attachment show ABCD1234   # attachment metadata
+zot note show NOTE1234         # one note with exact rich-text HTML
 zot collections               # collections as a tree (--flat for a list)
 zot stats                     # library-wide counts
 ```
@@ -27,6 +28,13 @@ request file bytes, resolve a path, or open Zotero's database.
 
 An enclosure is location and optional size metadata advertised by Zotero, not a
 portable filesystem-existence check. Use `--raw` for Zotero's complete
+single-item envelope.
+
+## Notes
+
+`zot note show NOTE_KEY` reports one note's parent, dates, tags, and Zotero's
+rich-text HTML exactly as stored. Standalone notes have no parent. The command
+does not sanitize the HTML or derive plain text; use `--raw` for the complete
 single-item envelope.
 
 ## Export

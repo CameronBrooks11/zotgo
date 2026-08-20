@@ -125,6 +125,25 @@ type ItemData struct {
 	Collections []string  `json:"collections"`
 }
 
+// Note is one Zotero note item's bounded metadata and exact rich-text HTML.
+type Note struct {
+	Key          string
+	ParentKey    string
+	DateAdded    string
+	DateModified string
+	Tags         []Tag
+	HTML         string
+}
+
+type noteData struct {
+	ItemType     string          `json:"itemType"`
+	ParentItem   json.RawMessage `json:"parentItem"`
+	DateAdded    string          `json:"dateAdded"`
+	DateModified string          `json:"dateModified"`
+	Tags         []Tag           `json:"tags"`
+	Note         json.RawMessage `json:"note"`
+}
+
 // Attachment is the metadata Zotero exposes for one attachment item.
 // It contains no filesystem-derived state.
 type Attachment struct {
@@ -213,6 +232,62 @@ func (e Envelope) ItemData() (ItemData, error) {
 	return data, err
 }
 
+// DecodeNote decodes one note's bounded fields from a raw item envelope.
+func DecodeNote(raw json.RawMessage) (Note, error) {
+	var item struct {
+		Key  string          `json:"key"`
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &item); err != nil {
+		return Note{}, err
+	}
+	return (Envelope{Key: item.Key, Data: item.Data}).NoteData()
+}
+
+// NoteData decodes and validates one note item's data object.
+func (e Envelope) NoteData() (Note, error) {
+	if e.Key == "" {
+		return Note{}, errors.New("missing note key")
+	}
+	if len(e.Data) == 0 {
+		return Note{}, fmt.Errorf("note %s has no data", e.Key)
+	}
+	var data noteData
+	if err := json.Unmarshal(e.Data, &data); err != nil {
+		return Note{}, fmt.Errorf("note %s: %w", e.Key, err)
+	}
+	if data.ItemType != "note" {
+		return Note{}, fmt.Errorf("item %s has type %q, not note", e.Key, data.ItemType)
+	}
+	parentKey, err := parentItemKey(data.ParentItem)
+	if err != nil {
+		return Note{}, fmt.Errorf("note %s parentItem: %w", e.Key, err)
+	}
+	trimmed := bytes.TrimSpace(data.Note)
+	if len(trimmed) == 0 {
+		return Note{}, fmt.Errorf("note %s has no note field", e.Key)
+	}
+	if bytes.Equal(trimmed, []byte("null")) {
+		return Note{}, fmt.Errorf("note %s note must be a string", e.Key)
+	}
+	var html string
+	if err := json.Unmarshal(trimmed, &html); err != nil {
+		return Note{}, fmt.Errorf("note %s note must be a string: %w", e.Key, err)
+	}
+	tags := data.Tags
+	if tags == nil {
+		tags = []Tag{}
+	}
+	return Note{
+		Key:          e.Key,
+		ParentKey:    parentKey,
+		DateAdded:    data.DateAdded,
+		DateModified: data.DateModified,
+		Tags:         tags,
+		HTML:         html,
+	}, nil
+}
+
 // DecodeAttachment decodes the bounded attachment fields from a raw item
 // envelope. Unrelated link objects remain outside the typed contract.
 func DecodeAttachment(raw json.RawMessage) (Attachment, error) {
@@ -249,7 +324,7 @@ func (e Envelope) AttachmentData() (Attachment, error) {
 	if data.ItemType != "attachment" {
 		return Attachment{}, fmt.Errorf("item %s has type %q, not attachment", e.Key, data.ItemType)
 	}
-	parentKey, err := attachmentParentKey(data.ParentItem)
+	parentKey, err := parentItemKey(data.ParentItem)
 	if err != nil {
 		return Attachment{}, fmt.Errorf("attachment %s parentItem: %w", e.Key, err)
 	}
@@ -283,7 +358,7 @@ func (e Envelope) AttachmentData() (Attachment, error) {
 	}, nil
 }
 
-func attachmentParentKey(raw json.RawMessage) (string, error) {
+func parentItemKey(raw json.RawMessage) (string, error) {
 	switch strings.TrimSpace(string(raw)) {
 	case "", "null", "false":
 		return "", nil
