@@ -17,6 +17,14 @@ Planned and outstanding work is tracked in the
   kind, while `--raw` preserves the complete Zotero item envelope after key and
   item-type validation.
 
+### Changed
+
+- Generic item updates now protect stored and embedded attachments from unsafe
+  storage metadata changes: `patch` rejects `filename`, `path`, and `linkMode`,
+  updates cannot transition attachment storage modes or convert items across the
+  attachment boundary, and `replace` is unavailable when the current or
+  resulting attachment is managed.
+
 ## [0.8.0] - 2026-08-13
 
 A symmetric machine-readable contract across every write, streaming reads for
@@ -42,11 +50,6 @@ site.
 
 ### Changed
 
-- Generic item updates now protect stored and embedded attachments from unsafe
-  storage metadata changes: `patch` rejects `filename`, `path`, and `linkMode`,
-  updates cannot transition attachment storage modes or convert items across the
-  attachment boundary, and `replace` is unavailable when the current or
-  resulting attachment is managed.
 - `list` and `search` with `--limit 0 --jsonl` now stream results page by page
   instead of buffering the whole library before writing, so a very large library
   is no longer held in memory all at once. Successful output is unchanged; an
