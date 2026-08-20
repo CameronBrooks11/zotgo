@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -82,10 +83,30 @@ func TestShowReadsAllChildrenInEveryMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("raw show: %v", err)
 	}
-	wantRaw := `{"item":` + strings.TrimSpace(showParentBody) + `,"children":[` + showChildOne + `,` + showChildTwo + "]}\n"
+	compact := `{"item":` + strings.TrimSpace(showParentBody) + `,"children":[` + showChildOne + `,` + showChildTwo + `]}`
+	wantRaw := indentRaw(t, compact)
 	if raw != wantRaw {
 		t.Fatalf("raw output changed envelopes:\n got: %q\nwant: %q", raw, wantRaw)
 	}
+	// Fidelity: the embedded envelopes' exact tokens survive indentation — the
+	// \u0061 escape is not unescaped and 1e3 is not re-encoded to 1000.
+	for _, token := range []string{`\u0061`, `1e3`} {
+		if !strings.Contains(raw, token) {
+			t.Errorf("raw output lost verbatim token %q:\n%s", token, raw)
+		}
+	}
+}
+
+// indentRaw mirrors rawShowDocument's 2-space formatting, so a test can assert
+// the pretty-printed shape without hand-maintaining an indented string literal.
+func indentRaw(t *testing.T, compact string) string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, []byte(compact), "", "  "); err != nil {
+		t.Fatalf("indent %q: %v", compact, err)
+	}
+	buf.WriteByte('\n')
+	return buf.String()
 }
 
 func TestShowEmitsEmptyChildrenArray(t *testing.T) {
@@ -110,8 +131,9 @@ func TestShowEmitsEmptyChildrenArray(t *testing.T) {
 	if err != nil {
 		t.Fatalf("raw show: %v", err)
 	}
-	if raw != `{"item":{"key":"PARENT01","data":{"key":"PARENT01","itemType":"book","title":"Parent"}},"children":[]}`+"\n" {
-		t.Fatalf("raw empty children = %q", raw)
+	wantEmpty := indentRaw(t, `{"item":{"key":"PARENT01","data":{"key":"PARENT01","itemType":"book","title":"Parent"}},"children":[]}`)
+	if raw != wantEmpty {
+		t.Fatalf("raw empty children:\n got: %q\nwant: %q", raw, wantEmpty)
 	}
 }
 
@@ -169,7 +191,7 @@ func TestShowRawWebProfilePaginates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("web raw show: %v", err)
 	}
-	if !strings.Contains(out, `"key":"CHILD02"`) {
+	if !strings.Contains(out, "CHILD02") {
 		t.Fatalf("web raw output missing second page:\n%s", out)
 	}
 	joined := strings.Join(paths, ",")

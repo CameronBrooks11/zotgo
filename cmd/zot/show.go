@@ -69,16 +69,29 @@ func showCommand() *cli.Command {
 }
 
 func rawShowDocument(item json.RawMessage, children []json.RawMessage) []byte {
-	var document bytes.Buffer
-	document.WriteString(`{"item":`)
-	document.Write(bytes.TrimSpace(item))
-	document.WriteString(`,"children":[`)
+	var compact bytes.Buffer
+	compact.WriteString(`{"item":`)
+	compact.Write(bytes.TrimSpace(item))
+	compact.WriteString(`,"children":[`)
 	for i, child := range children {
 		if i > 0 {
-			document.WriteByte(',')
+			compact.WriteByte(',')
 		}
-		document.Write(bytes.TrimSpace(child))
+		compact.Write(bytes.TrimSpace(child))
 	}
-	document.WriteString("]}\n")
-	return document.Bytes()
+	compact.WriteString("]}")
+
+	// Indent to match every other --raw command's 2-space output. json.Indent
+	// only reformats structural whitespace, so each embedded envelope keeps its
+	// exact bytes — number and string representations survive, and the raw
+	// channel's fidelity guarantee holds. The input is assembled from
+	// already-validated JSON, so this cannot fail; fall back to compact if it
+	// somehow does rather than dropping output.
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, compact.Bytes(), "", "  "); err != nil {
+		compact.WriteByte('\n')
+		return compact.Bytes()
+	}
+	pretty.WriteByte('\n')
+	return pretty.Bytes()
 }
