@@ -124,6 +124,7 @@ func TestNoteShowEmptyMalformedAndInputErrors(t *testing.T) {
 		{name: "missing argument", args: []string{"note", "show"}, want: "missing note key"},
 		{name: "not found", args: []string{"note", "show", "MISSING1"}, want: `no note with key "MISSING1"`},
 		{name: "wrong type", args: []string{"note", "show", "WRONG001"}, want: `type "book", not note`},
+		{name: "wrong type raw", args: []string{"--raw", "note", "show", "WRONG001"}, want: `type "book", not note`},
 		{name: "malformed stable body", args: []string{"--json", "note", "show", "BROKEN01"}, want: "note must be a string"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
