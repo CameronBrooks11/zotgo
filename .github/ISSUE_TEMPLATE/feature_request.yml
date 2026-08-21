@@ -1,0 +1,28 @@
+name: Enhancement
+description: Propose a new capability or an improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / use case
+      description: What are you trying to do that zotgo makes hard or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: >
+        What should zotgo do? If it involves reading from or writing to Zotero,
+        note which endpoint (local/web) and whether the data is exposed over the
+        API — zotgo never opens `zotero.sqlite`.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing commands, flags, or workarounds you tried.
+    validations:
+      required: false

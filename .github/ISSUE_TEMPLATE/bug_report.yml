@@ -1,0 +1,36 @@
+name: Bug report
+description: Something zotgo does wrong or unexpectedly
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please do **not** report security issues here —
+        see [SECURITY.md](https://github.com/CameronBrooks11/zotgo/blob/main/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+      placeholder: |
+        Command run, expected result, actual result. Include the exact command
+        and any error output.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: >
+        One line, e.g. `zotgo v0.8.0 · Zotero 9.0.6 (schema 42, API v3) · local
+        endpoint · Linux`. `zot doctor` reports most of this.
+      placeholder: zotgo vX.Y.Z · Zotero X.Y.Z (schema N, API v3) · local|web endpoint · Linux|macOS|Windows
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Logs, `--raw` output, or context that helps reproduce. Redact any secrets.
+    validations:
+      required: false
