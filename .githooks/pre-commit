@@ -1,0 +1,14 @@
+#!/bin/sh
+# zotgo pre-commit gate. Installed by `just setup` (sets core.hooksPath).
+#
+# Runs the same local gate AGENTS.md requires before every commit, so the
+# "never bypass with --no-verify" rule points at something real. CI re-runs
+# the full matrix; this is the fast local equivalent.
+set -e
+
+if ! command -v just >/dev/null 2>&1; then
+  echo "pre-commit: 'just' is not installed; see AGENTS.md for setup" >&2
+  exit 1
+fi
+
+exec just pre-commit

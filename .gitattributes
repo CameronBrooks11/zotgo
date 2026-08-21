@@ -1,0 +1,13 @@
+# Normalize line endings: store text as LF, check out LF on every platform.
+# The CI matrix builds on Windows, so this keeps checkouts byte-identical.
+* text=auto eol=lf
+
+# Go source and the tools that read it expect LF unconditionally.
+*.go text eol=lf
+
+# Binary assets must never be line-ending munged or diffed as text.
+*.png binary
+*.gif binary
+*.jpg binary
+*.pdf binary
+*.ico binary

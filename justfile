@@ -5,10 +5,11 @@
 default:
     @just --list
 
-# Download and verify module dependencies
+# Download deps, verify them, and install the local git hooks
 setup:
     go mod download
     go mod verify
+    git config core.hooksPath .githooks
 
 # Format all Go code in place
 fmt:
@@ -31,6 +32,9 @@ staticcheck:
 # CI-equivalent gate: formatting, vet, staticcheck, and a full compile
 check: fmt-check lint staticcheck
     go build ./...
+
+# The local pre-commit gate the git hook runs (see .githooks/pre-commit)
+pre-commit: check test
 
 # Run the test suite
 test:
