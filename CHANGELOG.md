@@ -28,6 +28,10 @@ Planned and outstanding work is tracked in the
 - `zot attachment import --yes` no longer echoes the plan block; on a preflight
   failure that duplicated the outcome's `Parent`/`MD5` lines. The plan block now
   prints only for the interactive confirmation it informs.
+- Interactive writes now confirm the endpoint can write *before* prompting, so
+  you are no longer asked to approve an operation a Zotero build without the
+  local write API cannot perform (the write-capability check moved ahead of the
+  confirmation across every write command).
 
 ### Added
 

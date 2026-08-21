@@ -147,6 +147,29 @@ func TestUnknownSubcommandSuggestsTheRightOne(t *testing.T) {
 	}
 }
 
+// #82: an interactive write on a build without the write API must fail at the
+// capability check, before asking the user to confirm an impossible operation.
+func TestInteractiveWriteChecksCapabilityBeforePrompting(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/item.json"
+	if err := os.WriteFile(path, []byte(`{"itemType":"book","title":"Cap Test"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	// No Zotero-Server-ID header: this build has no local write API.
+	mux.HandleFunc("GET /api/", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("Nothing")) })
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	out, _, err := runCLI(srv.URL, "item", "create", "--file", path)
+	if err == nil {
+		t.Fatal("expected a write-capability failure on a build without the write API")
+	}
+	if strings.Contains(out, "Create 1 item") {
+		t.Errorf("the confirmation prompt appeared before the capability check (#82):\n%s", out)
+	}
+}
+
 func TestDoctorReady(t *testing.T) {
 	srv := fakeZotero(true)
 	defer srv.Close()

@@ -98,14 +98,13 @@ func itemCreateAction(ctx context.Context, cmd *cli.Command) error {
 		return nil
 	}
 
-	if mode == output.ModeHuman && !cmd.Bool("yes") {
-		if fromStdin {
-			return errors.New("item JSON was read from stdin, so I cannot prompt — re-run with --yes (or --dry-run), or use --file")
-		}
-		if !confirm(os.Stdin, w, fmt.Sprintf("Create %d item(s) in %s?", len(items), lib.Name)) {
-			fmt.Fprintln(w, "Aborted.")
-			return nil
-		}
+	if fromStdin && mode == output.ModeHuman && !cmd.Bool("yes") {
+		return errors.New("item JSON was read from stdin, so I cannot prompt — re-run with --yes (or --dry-run), or use --file")
+	}
+	if proceed, err := confirmWrite(ctx, cmd, c, mode, w, fmt.Sprintf("Create %d item(s) in %s?", len(items), lib.Name)); err != nil {
+		return err
+	} else if !proceed {
+		return nil
 	}
 
 	if err := ensureWriteAuthority(ctx, cmd, c, mode); err != nil {
@@ -367,6 +366,27 @@ func writeIsInteractive(cmd *cli.Command, mode output.Mode) bool {
 	return mode == output.ModeHuman && !cmd.Bool("yes") && isTerminal(os.Stdin)
 }
 
+// confirmWrite gates an interactive write behind one call. On a build that
+// cannot write it fails fast, so the user is never asked to approve an operation
+// the endpoint cannot perform (#82); otherwise it prompts and prints "Aborted."
+// on a decline. Non-interactive writes (machine mode or --yes) always proceed;
+// their capability and authority are settled later by ensureWriteAuthority (the
+// capability probe is cached, so that repeat check is free). It returns whether
+// the caller should proceed with the write.
+func confirmWrite(ctx context.Context, cmd *cli.Command, c *zotero.Client, mode output.Mode, w io.Writer, prompt string) (bool, error) {
+	if mode != output.ModeHuman || cmd.Bool("yes") {
+		return true, nil
+	}
+	if err := c.RequireWriteCapability(ctx); err != nil {
+		return false, writeFriendly(err)
+	}
+	if !confirm(os.Stdin, w, prompt) {
+		fmt.Fprintln(w, "Aborted.")
+		return false, nil
+	}
+	return true, nil
+}
+
 // authorizeInteractively reuses a persisted local key or prompts the user in
 // Zotero, persisting the key when Zotero remembers it.
 func authorizeInteractively(ctx context.Context, c *zotero.Client) error {
@@ -554,14 +574,13 @@ func itemPatchAction(ctx context.Context, cmd *cli.Command) error {
 		fmt.Fprintln(w, "\nDry run — nothing was written.")
 		return nil
 	}
-	if mode == output.ModeHuman && !cmd.Bool("yes") {
-		if fromStdin {
-			return errors.New("the patch was read from stdin, so I cannot prompt — re-run with --yes (or --dry-run), or use --file")
-		}
-		if !confirm(os.Stdin, w, fmt.Sprintf("Patch %s?", key)) {
-			fmt.Fprintln(w, "Aborted.")
-			return nil
-		}
+	if fromStdin && mode == output.ModeHuman && !cmd.Bool("yes") {
+		return errors.New("the patch was read from stdin, so I cannot prompt — re-run with --yes (or --dry-run), or use --file")
+	}
+	if proceed, err := confirmWrite(ctx, cmd, c, mode, w, fmt.Sprintf("Patch %s?", key)); err != nil {
+		return err
+	} else if !proceed {
+		return nil
 	}
 
 	if err := ensureWriteAuthority(ctx, cmd, c, mode); err != nil {
@@ -656,14 +675,13 @@ func itemReplaceAction(ctx context.Context, cmd *cli.Command) error {
 		fmt.Fprintln(w, "\nDry run — nothing was written.")
 		return nil
 	}
-	if mode == output.ModeHuman && !cmd.Bool("yes") {
-		if fromStdin {
-			return errors.New("the item JSON was read from stdin, so I cannot prompt — re-run with --yes (or --dry-run), or use --file")
-		}
-		if !confirm(os.Stdin, w, fmt.Sprintf("Replace %s? Fields you omitted will be reset.", key)) {
-			fmt.Fprintln(w, "Aborted.")
-			return nil
-		}
+	if fromStdin && mode == output.ModeHuman && !cmd.Bool("yes") {
+		return errors.New("the item JSON was read from stdin, so I cannot prompt — re-run with --yes (or --dry-run), or use --file")
+	}
+	if proceed, err := confirmWrite(ctx, cmd, c, mode, w, fmt.Sprintf("Replace %s? Fields you omitted will be reset.", key)); err != nil {
+		return err
+	} else if !proceed {
+		return nil
 	}
 
 	if err := ensureWriteAuthority(ctx, cmd, c, mode); err != nil {
@@ -800,11 +818,10 @@ func itemDeleteAction(ctx context.Context, cmd *cli.Command) error {
 		fmt.Fprintln(w, "\nDry run — nothing was deleted.")
 		return nil
 	}
-	if mode == output.ModeHuman && !cmd.Bool("yes") {
-		if !confirm(os.Stdin, w, fmt.Sprintf("Delete %d item(s)? This cannot be undone.", len(found))) {
-			fmt.Fprintln(w, "Aborted.")
-			return nil
-		}
+	if proceed, err := confirmWrite(ctx, cmd, c, mode, w, fmt.Sprintf("Delete %d item(s)? This cannot be undone.", len(found))); err != nil {
+		return err
+	} else if !proceed {
+		return nil
 	}
 
 	if err := ensureWriteAuthority(ctx, cmd, c, mode); err != nil {

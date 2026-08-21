@@ -101,6 +101,11 @@ func attachmentImportAction(ctx context.Context, cmd *cli.Command) error {
 	// prompt, so it would only pre-echo fields the outcome block already reports —
 	// duplicated noise on a preflight failure (#82). Print it only when prompting.
 	if mode == output.ModeHuman && !cmd.Bool("yes") {
+		// Fail before printing the plan the build cannot carry out (#82); the plan
+		// block below otherwise implies the import will proceed.
+		if err := client.RequireWriteCapability(ctx); err != nil {
+			return writeFriendly(err)
+		}
 		fmt.Fprintf(out(cmd), "Target: %s - %s\n", library.Name, client.BaseURL())
 		fmt.Fprintf(out(cmd), "Parent: %s\nFile: %s (%d bytes)\nMD5: %s\n",
 			parentKey, staged.filename, staged.size, staged.md5)
