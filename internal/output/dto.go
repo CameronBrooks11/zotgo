@@ -40,6 +40,14 @@ type Item struct {
 	Date string `json:"date,omitempty"`
 	// ParsedDate is Zotero's normalized reading of Date, when it managed one.
 	ParsedDate string `json:"parsedDate,omitempty"`
+	// DateAdded and DateModified are Zotero's own timestamps (ISO 8601). They are
+	// the stable primitive for change detection and recency sorting, so they are
+	// always present rather than omitted.
+	DateAdded    string `json:"dateAdded"`
+	DateModified string `json:"dateModified"`
+	// ParentKey is the parent item's key on a child item (an attachment or note
+	// surfaced by `list --all`); absent on a top-level item.
+	ParentKey string `json:"parentKey,omitempty"`
 	// CreatorSummary is Zotero's short attribution, e.g. "Posten et al.".
 	CreatorSummary string    `json:"creatorSummary,omitempty"`
 	Creators       []Creator `json:"creators"`
@@ -303,6 +311,9 @@ func NewItem(e zotero.Envelope) Item {
 		Title:          data.Title,
 		Date:           data.Date,
 		ParsedDate:     e.ParsedDate(),
+		DateAdded:      data.DateAdded,
+		DateModified:   data.DateModified,
+		ParentKey:      data.ParentItem,
 		CreatorSummary: e.CreatorSummary(),
 		Creators:       creators,
 		Tags:           tags,

@@ -168,6 +168,11 @@ counter. Sending one to the Web API as a write precondition is a data-integrity
 hazard. If you need Zotero's number anyway, take it from `--raw`, which is
 explicitly outside this contract.
 
+For change detection and recency, use the item's own timestamps instead: every
+`item` record carries `dateAdded` and `dateModified` (Zotero's ISO-8601 values),
+which are always present. A child item surfaced by `list --all` also carries
+`parentKey`, the key of its parent; top-level items omit it.
+
 ## `--jsonl`
 
 `--jsonl` emits one document per line, each repeating `schema`, `kind`, and

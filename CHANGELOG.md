@@ -10,6 +10,13 @@ Planned and outstanding work is tracked in the
 
 ## [Unreleased]
 
+### Added
+
+- Item records in machine output now carry `dateAdded` and `dateModified`
+  (Zotero's own timestamps, always present) as the stable primitive for change
+  detection and recency, and a `parentKey` on child items surfaced by
+  `list --all`. All three are additive; no schema bump.
+
 ## [0.9.0] - 2026-08-21
 
 ### Added
