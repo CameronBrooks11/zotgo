@@ -29,8 +29,13 @@ lint:
 staticcheck:
     go run honnef.co/go/tools/cmd/staticcheck@v0.8.0 ./...
 
-# CI-equivalent gate: formatting, vet, staticcheck, and a full compile
-check: fmt-check lint staticcheck
+# Catch common misspellings across tracked source, docs, and comments. Scoped
+# to tracked files, so the gitignored _reference/ upstream tree is skipped.
+spell:
+    git ls-files -z | xargs -0 go run github.com/golangci/misspell/cmd/misspell@v0.8.0 -error
+
+# CI-equivalent gate: formatting, vet, staticcheck, spelling, and a full compile
+check: fmt-check lint staticcheck spell
     go build ./...
 
 # The local pre-commit gate the git hook runs (see .githooks/pre-commit)
