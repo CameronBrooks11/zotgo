@@ -23,10 +23,10 @@ for every command, so a script learns it once:
 }
 ```
 
-`kind` says what `data` holds: `items`, `item`, `attachment`, `note`,
-`relations`, `relation`, `collections`, `collection`, `stats`, `health`, or one
-of the mutation kinds (`item-mutations`, `collection-mutations`,
-`tag-mutations`, and their singular `*-mutation` forms
+`kind` says what `data` holds: `items`, `item`, `attachment`,
+`attachment-import`, `note`, `relations`, `relation`, `collections`,
+`collection`, `stats`, `health`, or one of the mutation kinds (`item-mutations`,
+`collection-mutations`, `tag-mutations`, and their singular `*-mutation` forms
 under `--jsonl`). A `health` document carries `endpoint` and `capabilities`, so a
 script can check for `write` support rather than assume it. `schema` is bumped
 only when a field changes meaning or disappears — new fields may appear at any
@@ -115,6 +115,22 @@ portable filesystem-existence assertion.
 response key and item type; changes to other Zotero-owned field shapes do not
 block the raw escape hatch.
 
+### Attachment import
+
+`zot --json attachment import --parent KEY --file PATH --yes` emits one
+`attachment-import` record. It reports `planned`, `duplicate`, `imported`,
+`partial`, or `failed`, the last completed stage, the nullable created key, the
+staged filename/type/size/MD5, focused verification, and a bounded failure when
+needed. `verification.actualFilename` is the filename read back from Zotero, so
+scripts can distinguish the requested name from the stored result. Nullable
+fields remain present as `null` in planned and partial records.
+
+Import is a derived multi-response mutation, so JSONL emits the same single
+self-describing record and `--raw` is unavailable. A failure after attachment
+metadata exists emits the partial record before exiting with status 1; it never
+silently rolls back the created item. Like other writes, a non-interactive import
+requires a write lease permitting `attachment.import`.
+
 ### Notes
 
 `zot --json note show NOTE_KEY` emits one `note` record containing its key,
@@ -157,3 +173,5 @@ Zotero's and changes when Zotero changes. Commands backed by multiple requests,
 such as `show`, may place complete Zotero envelopes inside a documented synthetic
 wrapper. `stats`, `doctor`, and every write command (item, collection, and tag)
 reject `--raw`, because their output is derived and is not a raw Zotero response.
+Managed attachment import also rejects `--raw` because its result combines
+metadata creation, upload, registration, and verification.

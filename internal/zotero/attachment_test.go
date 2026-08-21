@@ -43,6 +43,26 @@ func TestDecodeAttachment(t *testing.T) {
 	}
 }
 
+func TestAttachmentDecodeTreatsFalseEnclosureHrefAsUnavailable(t *testing.T) {
+	const fixture = `{"key":"ATTACH01","links":{"enclosure":{"href":false,"type":"application/pdf","title":""}},"data":{"itemType":"attachment","parentItem":"PARENT01","linkMode":"imported_file","filename":""}}`
+	attachment, err := DecodeAttachment(json.RawMessage(fixture))
+	if err != nil {
+		t.Fatalf("DecodeAttachment: %v", err)
+	}
+	if attachment.Key != "ATTACH01" || attachment.Enclosure != nil {
+		t.Fatalf("attachment = %#v", attachment)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(fixture))
+	}))
+	defer srv.Close()
+	attachment, err = New(srv.URL).Attachment(context.Background(), UserLibrary(), "ATTACH01")
+	if err != nil || attachment.Enclosure != nil {
+		t.Fatalf("Client.Attachment = %#v, %v", attachment, err)
+	}
+}
+
 func TestAttachmentDataNullableShapesAndValidation(t *testing.T) {
 	attachment, err := (Envelope{Key: "ATTACH01", Data: json.RawMessage(`{
 		"itemType":"attachment","parentItem":false,"linkMode":"linked_url","tags":null,"md5":null,"mtime":null

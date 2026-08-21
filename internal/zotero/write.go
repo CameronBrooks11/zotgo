@@ -108,6 +108,9 @@ func (c *Client) writeRequest(ctx context.Context, method, path string, opts wri
 		return resp.StatusCode, respBody, ErrPreconditionFailed
 	}
 	if readErr != nil {
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return resp.StatusCode, nil, fmt.Errorf("%w: reading successful write response: %v", ErrWriteOutcomeUnknown, readErr)
+		}
 		return resp.StatusCode, nil, readErr
 	}
 	return resp.StatusCode, respBody, nil
@@ -248,6 +251,14 @@ type WriteResult struct {
 	Failed     map[string]WriteFailure `json:"failed"`
 }
 
+// KeyWriteResult decodes only created keys, so callers that need no returned
+// object data are not coupled to unrelated Zotero envelope fields.
+type KeyWriteResult struct {
+	Successful map[string]string
+	Unchanged  map[string]string
+	Failed     map[string]WriteFailure
+}
+
 // WriteFailure explains why one object in a batch was rejected.
 type WriteFailure struct {
 	Key     string `json:"key"`
@@ -274,6 +285,35 @@ func parseWriteResult(body []byte) (WriteResult, error) {
 	return r, nil
 }
 
+func parseKeyWriteResult(body []byte) (KeyWriteResult, error) {
+	var response struct {
+		Successful map[string]json.RawMessage `json:"successful"`
+		Unchanged  map[string]string          `json:"unchanged"`
+		Failed     map[string]WriteFailure    `json:"failed"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return KeyWriteResult{}, fmt.Errorf("parsing key write response: %w", err)
+	}
+	result := KeyWriteResult{
+		Successful: make(map[string]string, len(response.Successful)),
+		Unchanged:  response.Unchanged,
+		Failed:     response.Failed,
+	}
+	for index, raw := range response.Successful {
+		var object struct {
+			Key string `json:"key"`
+		}
+		if err := json.Unmarshal(raw, &object); err != nil {
+			return KeyWriteResult{}, fmt.Errorf("parsing successful write response %q: %w", index, err)
+		}
+		if object.Key == "" {
+			return KeyWriteResult{}, fmt.Errorf("successful write response %q has no key", index)
+		}
+		result.Successful[index] = object.Key
+	}
+	return result, nil
+}
+
 // MaxDeleteObjects is the most keys accepted in one multi-delete (upstream
 // MAX_DELETE_OBJECTS).
 const MaxDeleteObjects = 50
@@ -285,21 +325,32 @@ func (c *Client) writeBatch(ctx context.Context, op Operation, lib LibraryRef, p
 	if len(objs) == 0 {
 		return WriteResult{}, nil
 	}
+	body, err := c.writeBatchResponse(ctx, op, lib, path, objs)
+	if err != nil {
+		return WriteResult{}, err
+	}
+	return parseWriteResult(body)
+}
+
+func (c *Client) writeBatchResponse(ctx context.Context, op Operation, lib LibraryRef, path string, objs []json.RawMessage) ([]byte, error) {
+	if len(objs) == 0 {
+		return nil, nil
+	}
 	if len(objs) > MaxWriteObjects {
-		return WriteResult{}, fmt.Errorf("%d objects exceeds the %d-object write limit", len(objs), MaxWriteObjects)
+		return nil, fmt.Errorf("%d objects exceeds the %d-object write limit", len(objs), MaxWriteObjects)
 	}
 	body, err := json.Marshal(objs)
 	if err != nil {
-		return WriteResult{}, err
+		return nil, fmt.Errorf("encode write batch: %w", err)
 	}
 	status, respBody, err := c.writeRequest(ctx, http.MethodPost, path, writeOptions{body: body, operation: op, library: lib})
 	if err != nil {
-		return WriteResult{}, err
+		return nil, err
 	}
 	if status != http.StatusOK {
-		return WriteResult{}, StatusError{StatusCode: status, Body: snippet(respBody)}
+		return nil, StatusError{StatusCode: status, Body: snippet(respBody)}
 	}
-	return parseWriteResult(respBody)
+	return respBody, nil
 }
 
 // patchObject applies a partial update to one object. Single-object writes
@@ -361,6 +412,22 @@ func (c *Client) deleteByQuery(ctx context.Context, op Operation, lib LibraryRef
 // fields) in one batch write.
 func (c *Client) CreateItems(ctx context.Context, op Operation, lib LibraryRef, items []json.RawMessage) (WriteResult, error) {
 	return c.writeBatch(ctx, op, lib, c.profile.LibraryPrefix(lib)+"/items", items)
+}
+
+// CreateItemsReturningKeys creates items while decoding only generated keys.
+func (c *Client) CreateItemsReturningKeys(ctx context.Context, op Operation, lib LibraryRef, items []json.RawMessage) (KeyWriteResult, error) {
+	if len(items) == 0 {
+		return KeyWriteResult{}, nil
+	}
+	body, err := c.writeBatchResponse(ctx, op, lib, c.profile.LibraryPrefix(lib)+"/items", items)
+	if err != nil {
+		return KeyWriteResult{}, err
+	}
+	result, err := parseKeyWriteResult(body)
+	if err != nil {
+		return KeyWriteResult{}, fmt.Errorf("%w: %v", ErrWriteOutcomeUnknown, err)
+	}
+	return result, nil
 }
 
 // PatchItem applies a partial update (a JSON object of fields to change) to one

@@ -31,6 +31,11 @@ Planned and outstanding work is tracked in the
   predicate and target records; `--raw` preserves the complete parent envelope.
 - `zot collection path KEY...` resolves complete root-to-leaf collection
   ancestry while preserving requested key order and duplicates.
+- `zot attachment import --parent KEY --file PATH` stages and verifies a local
+  file, creates a managed child attachment, uploads it through Zotero's Local
+  API, and reports duplicate, imported, or partial outcomes without automatic
+  rollback. Like other writes, a non-interactive import needs a write lease that
+  permits the `attachment.import` operation.
 
 ### Changed
 

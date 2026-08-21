@@ -5,6 +5,27 @@ import (
 	"testing"
 )
 
+func TestLinkAcceptsFalseHrefForUnregisteredManagedFile(t *testing.T) {
+	var envelope Envelope
+	if err := json.Unmarshal([]byte(`{
+		"key":"ATTACH01",
+		"links":{"enclosure":{"href":false,"type":"application/pdf","title":"","length":12}},
+		"data":{"itemType":"attachment","linkMode":"imported_file","parentItem":"PARENT01"}
+	}`), &envelope); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	link := envelope.Links["enclosure"]
+	if link.Href != "" || link.Type != "application/pdf" || link.Length == nil || *link.Length != 12 {
+		t.Fatalf("link = %#v", link)
+	}
+	for _, raw := range []string{`{"href":true}`, `{"href":42}`, `{"href":{}}`} {
+		var link Link
+		if err := json.Unmarshal([]byte(raw), &link); err == nil {
+			t.Errorf("invalid link accepted: %s", raw)
+		}
+	}
+}
+
 func TestVersionNumberUnmarshalJSON(t *testing.T) {
 	t.Parallel()
 
