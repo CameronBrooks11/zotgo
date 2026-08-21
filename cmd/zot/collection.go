@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -91,8 +90,9 @@ func collectionCreateAction(ctx context.Context, cmd *cli.Command) error {
 		fmt.Fprintln(w, "\nDry run — nothing was written.")
 		return nil
 	}
-	if mode == output.ModeHuman && !cmd.Bool("yes") && !confirm(os.Stdin, w, fmt.Sprintf("Create collection %q in %s?", name, lib.Name)) {
-		fmt.Fprintln(w, "Aborted.")
+	if proceed, err := confirmWrite(ctx, cmd, c, mode, w, fmt.Sprintf("Create collection %q in %s?", name, lib.Name)); err != nil {
+		return err
+	} else if !proceed {
 		return nil
 	}
 
@@ -258,8 +258,9 @@ func collectionRenameAction(ctx context.Context, cmd *cli.Command) error {
 		fmt.Fprintln(w, "\nDry run — nothing was written.")
 		return nil
 	}
-	if mode == output.ModeHuman && !cmd.Bool("yes") && !confirm(os.Stdin, w, fmt.Sprintf("Rename %s?", key)) {
-		fmt.Fprintln(w, "Aborted.")
+	if proceed, err := confirmWrite(ctx, cmd, c, mode, w, fmt.Sprintf("Rename %s?", key)); err != nil {
+		return err
+	} else if !proceed {
 		return nil
 	}
 
@@ -352,8 +353,9 @@ func collectionMoveAction(ctx context.Context, cmd *cli.Command) error {
 		fmt.Fprintln(w, "\nDry run — nothing was written.")
 		return nil
 	}
-	if mode == output.ModeHuman && !cmd.Bool("yes") && !confirm(os.Stdin, w, fmt.Sprintf("Move %s?", key)) {
-		fmt.Fprintln(w, "Aborted.")
+	if proceed, err := confirmWrite(ctx, cmd, c, mode, w, fmt.Sprintf("Move %s?", key)); err != nil {
+		return err
+	} else if !proceed {
 		return nil
 	}
 
@@ -450,8 +452,9 @@ func collectionDeleteAction(ctx context.Context, cmd *cli.Command) error {
 		fmt.Fprintln(w, "\nDry run — nothing was deleted.")
 		return nil
 	}
-	if mode == output.ModeHuman && !cmd.Bool("yes") && !confirm(os.Stdin, w, fmt.Sprintf("Delete %d collection(s)? This cannot be undone.", len(found))) {
-		fmt.Fprintln(w, "Aborted.")
+	if proceed, err := confirmWrite(ctx, cmd, c, mode, w, fmt.Sprintf("Delete %d collection(s)? This cannot be undone.", len(found))); err != nil {
+		return err
+	} else if !proceed {
 		return nil
 	}
 
