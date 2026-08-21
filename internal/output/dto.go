@@ -234,6 +234,32 @@ type Health struct {
 	// Capabilities always lists every known capability, supported or not, so a
 	// script can test a field rather than probe for a key's absence.
 	Capabilities []Capability `json:"capabilities"`
+	// Libraries reports per-library attachment-file editability (local endpoint
+	// only). Omitted when it could not be determined, so its absence is distinct
+	// from an empty account.
+	Libraries []LibraryFiles `json:"libraries,omitempty"`
+}
+
+// LibraryFiles is the per-library file-editability record: whether a library the
+// running Zotero can file into accepts attachment files. Endpoint-level
+// capabilities do not carry this — a writable group can still refuse files.
+type LibraryFiles struct {
+	ID            int    `json:"id"`
+	Name          string `json:"name"`
+	FilesEditable bool   `json:"filesEditable"`
+}
+
+// NewLibraryFiles converts per-library file-access records for machine output.
+// It returns nil for a nil input so the Health envelope omits the field.
+func NewLibraryFiles(libs []zotero.LibraryFiles) []LibraryFiles {
+	if libs == nil {
+		return nil
+	}
+	out := make([]LibraryFiles, 0, len(libs))
+	for _, l := range libs {
+		out = append(out, LibraryFiles{ID: l.ID, Name: l.Name, FilesEditable: l.FilesEditable})
+	}
+	return out
 }
 
 // zotero tag types: 0 is a manually entered tag, 1 one Zotero added itself.

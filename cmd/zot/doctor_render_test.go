@@ -126,6 +126,43 @@ func TestRenderHealth_KeepsActionableGuidance(t *testing.T) {
 	}
 }
 
+func renderLibrariesToString(libs []zotero.LibraryFiles) string {
+	var buf bytes.Buffer
+	renderLibraries(&buf, libs)
+	return buf.String()
+}
+
+// A library that accepts files gets a bare ✓; one that does not gets a ✗ and an
+// explanation, so a silent no-attachments library is no longer a mystery.
+func TestRenderLibraries_MarksAndReason(t *testing.T) {
+	out := renderLibrariesToString([]zotero.LibraryFiles{
+		{ID: 1, Name: "My Library", FilesEditable: true},
+		{ID: 6, Name: "Biological Reactor", FilesEditable: false},
+	})
+	if !strings.Contains(out, "My Library") || !strings.Contains(out, "files ✓") {
+		t.Errorf("missing the files-editable library:\n%s", out)
+	}
+	if !strings.Contains(out, "Biological Reactor") || !strings.Contains(out, "files ✗") {
+		t.Errorf("missing the files-not-editable library:\n%s", out)
+	}
+	if !strings.Contains(out, "attachments not accepted") {
+		t.Errorf("a ✗ library must explain itself:\n%s", out)
+	}
+	for i, line := range strings.Split(out, "\n") {
+		if line != strings.TrimRight(line, " \t") {
+			t.Errorf("line %d has trailing whitespace: %q", i, line)
+		}
+	}
+}
+
+// Nothing to report must render nothing, so a Web-API or probe-failed run does
+// not print an empty section.
+func TestRenderLibraries_EmptyIsSilent(t *testing.T) {
+	if out := renderLibrariesToString(nil); out != "" {
+		t.Errorf("expected no output for no libraries, got %q", out)
+	}
+}
+
 // The web endpoint's guidance points at the API key, not the desktop app.
 func TestRenderHealth_WebGuidance(t *testing.T) {
 	rejected := renderToString(zotero.Health{Endpoint: zotero.WebProfile("https://api.zotero.org"), Reachable: true})

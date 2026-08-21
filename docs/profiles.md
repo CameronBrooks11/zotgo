@@ -43,3 +43,8 @@ enough — zotgo issues no writes over `--web`.
   desktop app.
 - **Web**: `read`/`write` come from the API key's own grants; `connector-ingest`
   and `local-file-access` have no Web API equivalent and are reported unsupported.
+
+On the local endpoint, `doctor` also lists per-library file editability under
+**Libraries** (`data.libraries` in `--json`). It is finer-grained than the
+endpoint-level `local-file-access`: a writable group library can still refuse
+attachment files, and only this per-library view surfaces it.
