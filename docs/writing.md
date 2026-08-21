@@ -139,10 +139,11 @@ it performs several authenticated phases and a single-use key would be spent on 
 first.
 
 **Non-interactive writes** — anything with `--yes`, or machine output
-(`--json`/`--jsonl`) — require a **write lease**, so an agent's blast radius is
-bounded and auditable instead of the whole library. A lease is a human-granted,
-time-boxed, scoped capability; without one, a non-interactive write fails closed
-with `run 'zot grant'`.
+(`--json`/`--jsonl`) — require a **write lease**, so an unattended writer's blast
+radius (a script, a CI job, a cron sync, an AI agent) is bounded and auditable
+instead of the whole library. A lease is a human-granted, time-boxed, scoped
+capability; without one, a non-interactive write fails closed with
+`run 'zot grant'`.
 
 ```bash
 zot grant                                   # 30-min lease, all non-destructive ops, My Library
@@ -154,14 +155,14 @@ zot grant revoke                            # end it early
 
 `zot grant` is deliberately the inverse of every other write command: it **must**
 run in an interactive terminal (a human approves Zotero's authorize modal and the
-printed scope), so an agent cannot mint its own lease and `--yes` does not apply.
+printed scope), so automation cannot mint its own lease and `--yes` does not apply.
 The lease carries the write key it authorizes, so expiry and `revoke` actually
 remove write ability. Every decision — allowed or refused — is appended to the
 lease's audit log (`~/.config/zotgo/audit/<id>.jsonl`), summarized by
 `zot grant status`. `--dry-run` still previews non-interactive writes without a
 lease. Set `ZOTGO_CONFIG_DIR` to relocate the config directory.
 
-The lease **contains a rule-following agent** — one that only invokes `zot` and
+The lease **contains a rule-following caller** — one that only invokes `zot` and
 honors refusals — and gives you an audit trail. It is **not** a sandbox: on a
 single-user machine any process running as you could write the lease file, read a
 stored key, or call Zotero's local API directly, so the lease bounds *accidental*

@@ -11,4 +11,4 @@
 
 # Design
 
-- [Write authority for agents](design/write-authority.md)
+- [Write authority](design/write-authority.md)
