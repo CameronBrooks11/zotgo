@@ -11,7 +11,7 @@ updates:
       actions:
         patterns: ["*"]
 
-  # Go module dependencies (currently none, but keep zotgo current as they land).
+  # Go module dependencies (currently just the CLI framework).
   - package-ecosystem: gomod
     directory: /
     schedule:
@@ -20,4 +20,17 @@ updates:
       prefix: build
     groups:
       go:
+        patterns: ["*"]
+
+  # Build-time tools (staticcheck, govulncheck, misspell) live in their own
+  # module so their newer toolchain requirements stay out of the main 1.23
+  # graph; this entry lets dependabot see and bump them.
+  - package-ecosystem: gomod
+    directory: /tools
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+    groups:
+      tools:
         patterns: ["*"]
