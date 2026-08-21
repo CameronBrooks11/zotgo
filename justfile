@@ -26,7 +26,7 @@ lint:
 
 # staticcheck: the analyses `go vet` does not carry
 staticcheck:
-    go run honnef.co/go/tools/cmd/staticcheck@2025.1.1 ./...
+    go run honnef.co/go/tools/cmd/staticcheck@v0.8.0 ./...
 
 # CI-equivalent gate: formatting, vet, staticcheck, and a full compile
 check: fmt-check lint staticcheck
