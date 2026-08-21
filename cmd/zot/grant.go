@@ -22,9 +22,9 @@ func grantCommand() *cli.Command {
 		Name:  "grant",
 		Usage: "grant a time-boxed, scoped write lease so non-interactive writes can proceed (humans only)",
 		Description: "Mint a write lease: a human approves Zotero's authorize modal and a scope, and\n" +
-			"non-interactive writes (an agent's `--yes`/machine-mode commands) are then allowed\n" +
-			"only within it until it expires. Interactive writes you confirm yourself never need\n" +
-			"a lease. See docs/design/write-authority.md.",
+			"non-interactive writes (`--yes`/machine-mode commands — a script, CI job, or agent)\n" +
+			"are then allowed only within it until it expires. Interactive writes you confirm\n" +
+			"yourself never need a lease. See docs/design/write-authority.md.",
 		Flags: []cli.Flag{
 			&cli.DurationFlag{Name: "ttl", Value: DefaultLeaseTTL, Usage: "how long the lease is valid (max 24h)"},
 			&cli.StringSliceFlag{Name: "operations", Aliases: []string{"o"}, Usage: "operations to allow (default: all non-destructive writes)"},

@@ -12,14 +12,14 @@ Planned and outstanding work is tracked in the
 
 ### Added
 
-- `zot grant` mints a human-approved **write lease** so an agent's
-  non-interactive writes are bounded, time-boxed, and audited instead of
-  unrestricted. Non-interactive writes (`--yes` or machine output) now require an
-  active lease and otherwise fail closed with an actionable message; interactive
+- `zot grant` mints a human-approved **write lease** so non-interactive writes
+  (from a script, CI job, or agent) are bounded, time-boxed, and audited instead
+  of unrestricted. Non-interactive writes (`--yes` or machine output) now require
+  an active lease and otherwise fail closed with an actionable message; interactive
   writes you confirm yourself are unchanged. `zot grant status` and
   `zot grant revoke` inspect and end the lease, and every allowed or refused write
   is recorded to the lease's audit log. `zot grant` must run in an interactive
-  terminal (a human approves Zotero's authorize modal), so an agent cannot mint
+  terminal (a human approves Zotero's authorize modal), so automation cannot mint
   its own lease. See [the design doc](docs/design/write-authority.md).
 - `zot attachment show KEY` reports stable attachment metadata without reading
   or resolving attachment files; JSON/JSONL use the additive `attachment` DTO

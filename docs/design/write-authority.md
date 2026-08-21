@@ -1,11 +1,19 @@
-# Design: write authority for agents
+# Design: write authority
 
 **Status:** Accepted / RFC — design settled, implementation not yet started.
 
-This document defines how zotgo authorizes writes, so that an autonomous agent
-can be given **bounded, time-limited, auditable** write access to a Zotero
-library instead of an all-or-nothing switch. It supersedes the earlier working
-rule of a hard "agents never write through this tool."
+This document defines how zotgo authorizes writes, so that a non-interactive
+caller — a script, a CI job, a cron sync, or an autonomous agent — can be given
+**bounded, time-limited, auditable** write access to a Zotero library instead of
+an all-or-nothing switch. It supersedes the earlier working rule of a hard
+"agents never write through this tool."
+
+The design is framed throughout around an autonomous **agent**, because
+containing an agent that acts on your behalf without you watching is the sharpest
+version of the problem and the motivating use case. The mechanism is general,
+though: it keys off whether a human is present at the prompt, so every
+non-interactive writer is bounded the same way — an agent is simply the example
+that most needs it.
 
 ## Why this exists
 
