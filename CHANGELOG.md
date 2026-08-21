@@ -10,6 +10,8 @@ Planned and outstanding work is tracked in the
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-21
+
 ### Added
 
 - `zot doctor` now reports per-library attachment-file editability under a
@@ -213,7 +215,8 @@ contract before scripts could depend on it.
   `collections`, `stats`. Zero-dependency static binary and a goreleaser release
   pipeline.
 
-[Unreleased]: https://github.com/CameronBrooks11/zotgo/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/CameronBrooks11/zotgo/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.5.0...v0.6.0
