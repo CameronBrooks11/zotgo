@@ -90,10 +90,46 @@ confirm**:
 - `--dry-run` previews without writing (and without authorizing).
 - `--yes` skips the confirmation prompt for scripts.
 
-The first write prompts for approval in Zotero. Choosing **Always Allow** stores a
-local API key in `~/.config/zotgo/local-api-key` (mode `0600`) so later writes
-don't re-prompt; **Allow** grants a single-use key. Set `ZOTGO_CONFIG_DIR` to
-relocate the config directory.
+There are two ways a write is authorized, matched to who is driving it.
+
+**Interactive writes** — a human at a terminal answering the confirmation prompt —
+are their own authority. The first such write prompts for approval in Zotero.
+Choosing **Always Allow** stores a local API key in `~/.config/zotgo/local-api-key`
+(mode `0600`) so later interactive writes don't re-prompt; **Allow** grants a
+single-use key.
+
+**Non-interactive writes** — anything with `--yes`, or machine output
+(`--json`/`--jsonl`) — require a **write lease**, so an agent's blast radius is
+bounded and auditable instead of the whole library. A lease is a human-granted,
+time-boxed, scoped capability; without one, a non-interactive write fails closed
+with `run 'zot grant'`.
+
+```bash
+zot grant                                   # 30-min lease, all non-destructive ops, My Library
+zot grant --ttl 2h -o item.patch -o tag.add # narrower scope and lifetime (max 24h)
+zot grant --note "cleanup for project X"    # a note recorded in the lease and audit log
+zot grant status                            # show the active lease and its audit summary
+zot grant revoke                            # end it early
+```
+
+`zot grant` is deliberately the inverse of every other write command: it **must**
+run in an interactive terminal (a human approves Zotero's authorize modal and the
+printed scope), so an agent cannot mint its own lease and `--yes` does not apply.
+The lease carries the write key it authorizes, so expiry and `revoke` actually
+remove write ability. Every decision — allowed or refused — is appended to the
+lease's audit log (`~/.config/zotgo/audit/<id>.jsonl`), summarized by
+`zot grant status`. `--dry-run` still previews non-interactive writes without a
+lease. Set `ZOTGO_CONFIG_DIR` to relocate the config directory.
+
+The lease **contains a rule-following agent** — one that only invokes `zot` and
+honors refusals — and gives you an audit trail. It is **not** a sandbox: on a
+single-user machine any process running as you could write the lease file, read a
+stored key, or call Zotero's local API directly, so the lease bounds *accidental*
+blast radius, not a determined one. Revoking a lease removes zotgo's state only; if
+you clicked **Always Allow**, revoke that key in Zotero's settings too, since the
+Local API has no remote revoke. See
+[the design doc](design/write-authority.md) for the full model and threat
+boundaries.
 
 Writes carry Zotero's required `Zotero-Server-ID` and `If-Unmodified-Since-Version`
 preconditions, so if the library changed since the command read it, the write is

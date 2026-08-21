@@ -134,6 +134,7 @@ func decodeTagMutationDocument(t *testing.T, raw string) []output.TagMutation {
 }
 
 func TestTagAddMachine(t *testing.T) {
+	seedWriteLease(t)
 	fake := &tagWriteFake{}
 	srv := newTagWriteFake(t, fake)
 	defer srv.Close()
@@ -170,6 +171,7 @@ func TestTagAddMachine(t *testing.T) {
 }
 
 func TestTagRemoveMachineUnchangedWhenAbsent(t *testing.T) {
+	seedWriteLease(t)
 	storeItemWriteKey(t)
 	fake := &tagWriteFake{}
 	srv := newTagWriteFake(t, fake)
@@ -252,6 +254,7 @@ func TestTagDeleteHumanDryRunOutputUnchanged(t *testing.T) {
 }
 
 func TestTagDeleteMachine(t *testing.T) {
+	seedWriteLease(t)
 	fake := &tagWriteFake{}
 	srv := newTagWriteFake(t, fake)
 	defer srv.Close()

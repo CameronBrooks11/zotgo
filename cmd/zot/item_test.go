@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/urfave/cli/v3"
 
@@ -472,6 +473,32 @@ func storeItemWriteKey(t *testing.T) {
 	t.Setenv("ZOTGO_CONFIG_DIR", t.TempDir())
 	if err := saveLocalKey("TEST-KEY"); err != nil {
 		t.Fatalf("saveLocalKey: %v", err)
+	}
+	seedWriteLease(t) // non-interactive writes now require a lease, not just a key
+}
+
+// seedWriteLease writes an active, all-operations, user-library lease into the
+// test's config dir (creating one when unset), so a non-interactive write is
+// authorized in tests without the interactive grant flow. Its key matches what
+// the write fakes accept.
+func seedWriteLease(t *testing.T) {
+	t.Helper()
+	if os.Getenv("ZOTGO_CONFIG_DIR") == "" {
+		t.Setenv("ZOTGO_CONFIG_DIR", t.TempDir())
+	}
+	ops := make([]string, 0, len(writeOperations))
+	for _, op := range writeOperations {
+		ops = append(ops, string(op))
+	}
+	l := &lease{
+		ID:       "lease_test",
+		Created:  time.Now(),
+		Expires:  time.Now().Add(time.Hour),
+		Scope:    leaseScope{Libraries: []string{"user:0"}, Operations: ops},
+		WriteKey: "TEST-KEY",
+	}
+	if err := saveLease(l); err != nil {
+		t.Fatalf("saveLease: %v", err)
 	}
 }
 

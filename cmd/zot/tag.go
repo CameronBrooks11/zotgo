@@ -59,9 +59,6 @@ func tagDeleteAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	if k := loadLocalKey(); k != "" {
-		c.SetLocalKey(k)
-	}
 
 	w := out(cmd)
 	records := make([]output.TagMutation, 0, len(names))
@@ -88,7 +85,7 @@ func tagDeleteAction(ctx context.Context, cmd *cli.Command) error {
 		return nil
 	}
 
-	if err := ensureLocalKey(ctx, c); err != nil {
+	if err := ensureWriteAuthority(ctx, cmd, c, mode); err != nil {
 		return err
 	}
 	version, err := c.LibraryVersion(ctx, lib)
@@ -159,9 +156,6 @@ func itemTagAction(ctx context.Context, cmd *cli.Command, add bool) error {
 	if err != nil {
 		return err
 	}
-	if k := loadLocalKey(); k != "" {
-		c.SetLocalKey(k)
-	}
 
 	item, err := c.Item(ctx, lib, itemKey)
 	if err != nil {
@@ -231,7 +225,7 @@ func itemTagAction(ctx context.Context, cmd *cli.Command, add bool) error {
 		return nil
 	}
 
-	if err := ensureLocalKey(ctx, c); err != nil {
+	if err := ensureWriteAuthority(ctx, cmd, c, mode); err != nil {
 		return err
 	}
 	patch, err := tagsPatch(next)

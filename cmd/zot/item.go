@@ -76,9 +76,6 @@ func itemCreateAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	if k := loadLocalKey(); k != "" {
-		c.SetLocalKey(k)
-	}
 
 	w := out(cmd)
 	if mode == output.ModeHuman {
@@ -104,7 +101,7 @@ func itemCreateAction(ctx context.Context, cmd *cli.Command) error {
 		}
 	}
 
-	if err := ensureLocalKey(ctx, c); err != nil {
+	if err := ensureWriteAuthority(ctx, cmd, c, mode); err != nil {
 		return err
 	}
 
@@ -304,15 +301,38 @@ func sortedIndices[V any](m map[string]V) []string {
 	return keys
 }
 
-// ensureLocalKey makes sure the client can write: it reuses a persisted key, or
-// prompts the user in Zotero and persists the key if they chose to remember it.
-func ensureLocalKey(ctx context.Context, c *zotero.Client) error {
-	// Fail before authorizing or writing if this Zotero build has no write API,
-	// so the user gets an actionable reason rather than an untrue "approve the
-	// prompt" line and a late, opaque 404. Runs even with a persisted key, since
-	// a stale key on a read-only build would otherwise reach the write and 404.
+// ensureWriteAuthority establishes authority for one write and readies the client
+// to perform it. An interactive human who has confirmed the write is their own
+// authority; a non-interactive write (--yes or machine mode) requires a write
+// lease, whose scope and expiry are then enforced and audited at the write
+// chokepoint. Either way it first fails fast on a build with no write API, so the
+// user gets an actionable reason rather than a late, opaque 404.
+func ensureWriteAuthority(ctx context.Context, cmd *cli.Command, c *zotero.Client, mode output.Mode) error {
 	if err := c.RequireWriteCapability(ctx); err != nil {
 		return writeFriendly(err)
+	}
+	if writeIsInteractive(cmd, mode) {
+		// The human confirmed at the prompt; they are the authority for this write.
+		c.SetWriteAuthorizer(zotero.AllowAllWrites())
+		return authorizeInteractively(ctx, c)
+	}
+	return installLeaseAuthority(c)
+}
+
+// writeIsInteractive reports whether a real human at a terminal answered the
+// confirmation prompt for this write — the only case that needs no lease. Machine
+// mode, --yes, and a piped/redirected stdin (e.g. `echo y | zot …`, the agent
+// idiom) are all non-interactive and must go through a lease, so a scripted "y"
+// cannot install allow-all and slip past the lease and its audit log.
+func writeIsInteractive(cmd *cli.Command, mode output.Mode) bool {
+	return mode == output.ModeHuman && !cmd.Bool("yes") && isTerminal(os.Stdin)
+}
+
+// authorizeInteractively reuses a persisted local key or prompts the user in
+// Zotero, persisting the key when Zotero remembers it.
+func authorizeInteractively(ctx context.Context, c *zotero.Client) error {
+	if k := loadLocalKey(); k != "" {
+		c.SetLocalKey(k)
 	}
 	if c.HasLocalKey() {
 		return nil
@@ -330,6 +350,20 @@ func ensureLocalKey(ctx context.Context, c *zotero.Client) error {
 	return nil
 }
 
+// installLeaseAuthority loads the active write lease, installs it as the client's
+// authorizer (so scope and expiry are enforced and audited at the write
+// chokepoint), and binds the write to the lease's own key — never a persisted
+// standalone key. With no lease the write fails closed.
+func installLeaseAuthority(c *zotero.Client) error {
+	l, err := loadActiveLease()
+	if err != nil {
+		return err // ErrNoActiveLease and parse errors carry actionable messages
+	}
+	c.SetWriteAuthorizer(newLeaseAuthorizer(l))
+	c.SetLocalKey(l.WriteKey)
+	return nil
+}
+
 // confirm asks a yes/no question, defaulting to no.
 func confirm(in io.Reader, w io.Writer, question string) bool {
 	fmt.Fprintf(w, "%s [y/N] ", question)
@@ -341,8 +375,12 @@ func confirm(in io.Reader, w io.Writer, question string) bool {
 // writeFriendly turns the write-path sentinels into actionable messages.
 func writeFriendly(err error) error {
 	switch {
-	case errors.Is(err, zotero.ErrWriteUnsupported):
-		return err // its message is already the actionable reason
+	case errors.Is(err, zotero.ErrWriteUnsupported),
+		errors.Is(err, ErrNoActiveLease),
+		errors.Is(err, ErrLeaseExpired),
+		errors.Is(err, ErrLeaseLibrary),
+		errors.Is(err, ErrLeaseOperation):
+		return err // these messages are already the actionable reason
 	case errors.Is(err, zotero.ErrAuthorizeDenied):
 		return errors.New("authorization denied in Zotero")
 	case errors.Is(err, zotero.ErrWriteUnauthorized):
@@ -437,9 +475,6 @@ func itemPatchAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	if k := loadLocalKey(); k != "" {
-		c.SetLocalKey(k)
-	}
 
 	item, err := c.Item(ctx, lib, key)
 	if err != nil {
@@ -486,7 +521,7 @@ func itemPatchAction(ctx context.Context, cmd *cli.Command) error {
 		}
 	}
 
-	if err := ensureLocalKey(ctx, c); err != nil {
+	if err := ensureWriteAuthority(ctx, cmd, c, mode); err != nil {
 		return err
 	}
 	if err := c.PatchItem(ctx, zotero.OpItemPatch, lib, key, patch, item.Version); err != nil {
@@ -541,9 +576,6 @@ func itemReplaceAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	if k := loadLocalKey(); k != "" {
-		c.SetLocalKey(k)
-	}
 
 	item, err := c.Item(ctx, lib, key)
 	if err != nil {
@@ -591,7 +623,7 @@ func itemReplaceAction(ctx context.Context, cmd *cli.Command) error {
 		}
 	}
 
-	if err := ensureLocalKey(ctx, c); err != nil {
+	if err := ensureWriteAuthority(ctx, cmd, c, mode); err != nil {
 		return err
 	}
 	if err := c.ReplaceItem(ctx, zotero.OpItemReplace, lib, key, full, item.Version); err != nil {
@@ -677,9 +709,6 @@ func itemDeleteAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	if k := loadLocalKey(); k != "" {
-		c.SetLocalKey(k)
-	}
 
 	w := out(cmd)
 	if mode == output.ModeHuman {
@@ -735,7 +764,7 @@ func itemDeleteAction(ctx context.Context, cmd *cli.Command) error {
 		}
 	}
 
-	if err := ensureLocalKey(ctx, c); err != nil {
+	if err := ensureWriteAuthority(ctx, cmd, c, mode); err != nil {
 		return err
 	}
 	version, err := c.LibraryVersion(ctx, lib)
