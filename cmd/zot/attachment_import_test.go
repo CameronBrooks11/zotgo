@@ -794,6 +794,33 @@ func TestAttachmentImportDuplicateScanUsesChildrenRouteOnly(t *testing.T) {
 	}
 }
 
+// #82: with --yes there is no prompt to inform, so the plan block must not
+// pre-echo fields the outcome block already reports — on a preflight failure
+// that was pure duplication (Parent/MD5 twice).
+func TestAttachmentImportYesFailureDoesNotDuplicateFields(t *testing.T) {
+	path := writeAttachmentTestPDF(t)
+	mux := http.NewServeMux()
+	// No Zotero-Server-ID anywhere: the build has no write API, so the import
+	// fails at the capability check in preflight, before anything is attempted.
+	mux.HandleFunc("GET /api/", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("Nothing")) })
+	mux.HandleFunc("GET /api/users/0/items/PARENT01", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"key":"PARENT01","data":{"key":"PARENT01","itemType":"journalArticle","title":"Paper"}}`))
+	})
+	mux.HandleFunc("GET /api/users/0/items/PARENT01/children", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[]`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	out, _, err := runCLI(srv.URL, "attachment", "import", "--parent", "PARENT01", "--file", path, "--yes")
+	if err == nil {
+		t.Fatal("expected a failure on a build without the write API")
+	}
+	if n := strings.Count(out, "Parent:"); n != 1 {
+		t.Errorf("Parent: appears %d times, want 1 (plan block must not duplicate the outcome):\n%s", n, out)
+	}
+}
+
 func TestAttachmentImportGroupDryRunUsesGroupRoutes(t *testing.T) {
 	path := writeAttachmentTestPDF(t)
 	mux := http.NewServeMux()

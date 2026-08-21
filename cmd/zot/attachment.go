@@ -14,8 +14,9 @@ import (
 
 func attachmentCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "attachment",
-		Usage: "inspect and import attachments",
+		Name:   "attachment",
+		Usage:  "inspect and import attachments",
+		Action: subcommandRequired("show"),
 		Commands: []*cli.Command{
 			attachmentShowCommand(),
 			attachmentImportCommand(),

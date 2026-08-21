@@ -131,6 +131,22 @@ func runCLI(url string, args ...string) (string, string, error) {
 	return stdout.String(), stderr.String(), err
 }
 
+// A bare key after a noun that only groups subcommands should suggest the likely
+// subcommand, not cli's bare "No help topic". Runs before any network.
+func TestUnknownSubcommandSuggestsTheRightOne(t *testing.T) {
+	for _, c := range []struct{ noun, suggest string }{
+		{"attachment", "show"},
+		{"note", "show"},
+		{"relation", "list"},
+		{"annotation", "list"},
+	} {
+		_, _, err := runCLI("http://unused.invalid", c.noun, "SOMEKEY01")
+		if err == nil || !strings.Contains(err.Error(), `did you mean "`+c.suggest+`"`) {
+			t.Errorf("%s SOMEKEY01: err = %v, want a suggestion of %q", c.noun, err, c.suggest)
+		}
+	}
+}
+
 func TestDoctorReady(t *testing.T) {
 	srv := fakeZotero(true)
 	defer srv.Close()

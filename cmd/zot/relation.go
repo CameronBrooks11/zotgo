@@ -14,8 +14,9 @@ import (
 
 func relationCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "relation",
-		Usage: "inspect item relations",
+		Name:   "relation",
+		Usage:  "inspect item relations",
+		Action: subcommandRequired("list"),
 		Commands: []*cli.Command{
 			relationListCommand(),
 		},

@@ -120,6 +120,19 @@ func rootCommand() *cli.Command {
 	}
 }
 
+// subcommandRequired is the Action for a noun command that only groups
+// subcommands. With an unrecognized argument it names the likely subcommand
+// instead of cli's bare "No help topic for 'X'" (e.g. `zot attachment KEY` when
+// the user meant `zot attachment show KEY`); with no argument it shows help.
+func subcommandRequired(suggest string) cli.ActionFunc {
+	return func(_ context.Context, cmd *cli.Command) error {
+		if arg := cmd.Args().First(); arg != "" {
+			return fmt.Errorf("unknown %s subcommand %q; did you mean %q? (see `zot %s --help`)", cmd.Name, arg, suggest, cmd.Name)
+		}
+		return cli.ShowSubcommandHelp(cmd)
+	}
+}
+
 // out returns the writer commands should print results to (os.Stdout by
 // default; overridable in tests via the root command's Writer).
 func out(cmd *cli.Command) io.Writer {

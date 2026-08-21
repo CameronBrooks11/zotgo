@@ -14,8 +14,9 @@ import (
 
 func annotationCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "annotation",
-		Usage: "inspect attachment annotations",
+		Name:   "annotation",
+		Usage:  "inspect attachment annotations",
+		Action: subcommandRequired("list"),
 		Commands: []*cli.Command{
 			annotationListCommand(),
 		},
