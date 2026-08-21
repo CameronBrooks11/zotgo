@@ -39,6 +39,10 @@ func grantCommand() *cli.Command {
 }
 
 func grantAction(ctx context.Context, cmd *cli.Command) error {
+	if arg := cmd.Args().First(); arg != "" {
+		suggestion := cli.SuggestCommand(cmd.Commands, arg)
+		return fmt.Errorf("unknown grant subcommand %q; did you mean %q? (see `zot grant --help`)", arg, suggestion)
+	}
 	// Minting is deliberately the inverse of every other write command: it demands
 	// an interactive human. An agent cannot approve Zotero's modal, and --yes does
 	// not apply here.

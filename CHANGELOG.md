@@ -31,6 +31,10 @@ Planned and outstanding work is tracked in the
 
 ### Added
 
+- Root help now groups commands by task, points newcomers to the first useful
+  workflows, and suggests likely commands, nested subcommands, and flags after
+  typos. Every command keeps authoritative leaf help under
+  `zot <command> --help`.
 - Item records in machine output now carry `dateAdded` and `dateModified`
   (Zotero's own timestamps, always present) as the stable primitive for change
   detection and recency, and a `parentKey` on child items surfaced by

@@ -14,9 +14,10 @@ import (
 
 func noteCommand() *cli.Command {
 	return &cli.Command{
-		Name:   "note",
-		Usage:  "inspect Zotero notes",
-		Action: subcommandRequired("show"),
+		Name:        "note",
+		Usage:       "inspect Zotero notes",
+		Description: "Use `note show` when exact rich-text HTML is explicitly needed; generic item views do not expose note bodies.",
+		Action:      subcommandRequired("show"),
 		Commands: []*cli.Command{
 			noteShowCommand(),
 		},

@@ -14,8 +14,10 @@ import (
 
 func attachmentCommand() *cli.Command {
 	return &cli.Command{
-		Name:   "attachment",
-		Usage:  "inspect and import attachments",
+		Name:  "attachment",
+		Usage: "inspect and import attachments",
+		Description: "Use `attachment show` for API-reported metadata, or `attachment import` to attach a local file " +
+			"as a Zotero-managed file. Managed imports are local-only.",
 		Action: subcommandRequired("show"),
 		Commands: []*cli.Command{
 			attachmentShowCommand(),
