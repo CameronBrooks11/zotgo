@@ -101,10 +101,11 @@ func TestLiveWriteRoundTrip(t *testing.T) {
 		t.Errorf("patched title = %q, want zotgo patched", got.Title())
 	}
 
-	// Replace is a full-object PUT, unlike patch's merge. Set a tag, then replace
-	// with a body that omits it: the tag must vanish, proving replace overwrites
-	// the whole object rather than merging. Full-replace is the highest-risk
-	// write, so confirm the drop semantics against the real contract.
+	// Replace is a full-object PUT. It overwrites ordinary fields (the title
+	// below changes), but the local write API has a verified quirk documented on
+	// ReplaceItem: an omitted "tags" is PRESERVED rather than cleared, and only an
+	// explicit "tags":[] strips them. This live leg pins both halves of that
+	// contract — the surprising behavior our code comment claims.
 	if err := c.PatchItem(ctx, OpItemPatch, lib, created.Key, json.RawMessage(`{"tags":[{"tag":"zotgoreplacetag"}]}`), got.Version); err != nil {
 		t.Fatalf("tag patch before replace: %v", err)
 	}
@@ -115,6 +116,8 @@ func TestLiveWriteRoundTrip(t *testing.T) {
 	if d, _ := got.ItemData(); len(d.Tags) != 1 {
 		t.Fatalf("expected one tag set before replace, got %+v", d.Tags)
 	}
+
+	// Replace omitting tags: the title is overwritten, the tag is preserved.
 	if err := c.ReplaceItem(ctx, OpItemReplace, lib, created.Key, json.RawMessage(`{"itemType":"book","title":"zotgo replaced"}`), got.Version); err != nil {
 		t.Fatalf("ReplaceItem: %v", err)
 	}
@@ -125,8 +128,20 @@ func TestLiveWriteRoundTrip(t *testing.T) {
 	if got.Title() != "zotgo replaced" {
 		t.Errorf("replaced title = %q, want zotgo replaced", got.Title())
 	}
+	if d, _ := got.ItemData(); len(d.Tags) != 1 {
+		t.Errorf("omitted tags were not preserved on replace (contract drift): %+v", d.Tags)
+	}
+
+	// Replace with an explicit empty tags array: now the tag is cleared.
+	if err := c.ReplaceItem(ctx, OpItemReplace, lib, created.Key, json.RawMessage(`{"itemType":"book","title":"zotgo replaced","tags":[]}`), got.Version); err != nil {
+		t.Fatalf("ReplaceItem (clear tags): %v", err)
+	}
+	got, err = c.Item(ctx, lib, created.Key)
+	if err != nil {
+		t.Fatalf("read after tag-clearing replace: %v", err)
+	}
 	if d, _ := got.ItemData(); len(d.Tags) != 0 {
-		t.Errorf("replace did not drop the prior tag (merged like patch?): %+v", d.Tags)
+		t.Errorf(`explicit "tags":[] did not clear tags on replace: %+v`, d.Tags)
 	}
 
 	// Delete, then confirm it is gone (also cleans up the test item).
