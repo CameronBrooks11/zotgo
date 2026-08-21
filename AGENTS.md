@@ -110,8 +110,15 @@ internal/
   output/         machine-readable contract: versioned DTOs + json/jsonl/raw
   render/         human terminal output: tables and detail views
 docs/             user + reference documentation
+tools/            separate module pinning build-time tools (see below)
 _reference/       pyzot + zotero upstream, for mining (gitignored)
 ```
+
+`tools/` is its own Go module. It pins the versions of the build-time tools
+(`staticcheck`, `govulncheck`, `misspell`) so dependabot tracks them, and stays
+separate so their newer toolchain requirements never enter the main module's
+`go 1.23` graph. The `just` recipes build these tools from `tools/` into `bin/`;
+never add tool dependencies to the main `go.mod`.
 
 ## CI and release
 

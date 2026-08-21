@@ -25,14 +25,20 @@ lint:
     go vet ./...
     go vet -tags live ./...
 
+# Build a version-pinned build-time tool from the tools/ module into ./bin.
+# Versions live in tools/go.mod so dependabot tracks them; the separate module
+# keeps their (newer) toolchain requirements out of the main 1.23 graph.
+_tool name pkg:
+    @go -C tools build -o "{{justfile_directory()}}/bin/{{name}}" {{pkg}}
+
 # staticcheck: the analyses `go vet` does not carry
-staticcheck:
-    go run honnef.co/go/tools/cmd/staticcheck@v0.8.0 ./...
+staticcheck: (_tool "staticcheck" "honnef.co/go/tools/cmd/staticcheck")
+    ./bin/staticcheck ./...
 
 # Catch common misspellings across tracked source, docs, and comments. Scoped
 # to tracked files, so the gitignored _reference/ upstream tree is skipped.
-spell:
-    git ls-files -z | xargs -0 go run github.com/golangci/misspell/cmd/misspell@v0.8.0 -error
+spell: (_tool "misspell" "github.com/golangci/misspell/cmd/misspell")
+    git ls-files -z | xargs -0 ./bin/misspell -error
 
 # CI-equivalent gate: formatting, vet, staticcheck, spelling, and a full compile
 check: fmt-check lint staticcheck spell
@@ -56,8 +62,8 @@ test-live:
 
 # Report known vulnerabilities reachable from our code. Stdlib findings track
 # the toolchain that builds them, so run this on a current Go.
-vuln:
-    go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+vuln: (_tool "govulncheck" "golang.org/x/vuln/cmd/govulncheck")
+    ./bin/govulncheck ./...
 
 # Build the zot binary into ./bin
 build:
