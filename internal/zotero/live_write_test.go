@@ -8,7 +8,7 @@
 //	ZOTGO_BASE_URL=http://localhost:23119 go test -tags live ./internal/zotero -run TestLiveWrite -v
 //
 // Authorize pops a modal in Zotero. Click **Always Allow** — a single-use
-// ("Allow") key is consumed by the first write, and the round-trip does three.
+// ("Allow") key is consumed by the first write, and the round-trip does several.
 package zotero
 
 import (
@@ -99,6 +99,34 @@ func TestLiveWriteRoundTrip(t *testing.T) {
 	}
 	if got.Title() != "zotgo patched" {
 		t.Errorf("patched title = %q, want zotgo patched", got.Title())
+	}
+
+	// Replace is a full-object PUT, unlike patch's merge. Set a tag, then replace
+	// with a body that omits it: the tag must vanish, proving replace overwrites
+	// the whole object rather than merging. Full-replace is the highest-risk
+	// write, so confirm the drop semantics against the real contract.
+	if err := c.PatchItem(ctx, OpItemPatch, lib, created.Key, json.RawMessage(`{"tags":[{"tag":"zotgoreplacetag"}]}`), got.Version); err != nil {
+		t.Fatalf("tag patch before replace: %v", err)
+	}
+	got, err = c.Item(ctx, lib, created.Key)
+	if err != nil {
+		t.Fatalf("read before replace: %v", err)
+	}
+	if d, _ := got.ItemData(); len(d.Tags) != 1 {
+		t.Fatalf("expected one tag set before replace, got %+v", d.Tags)
+	}
+	if err := c.ReplaceItem(ctx, OpItemReplace, lib, created.Key, json.RawMessage(`{"itemType":"book","title":"zotgo replaced"}`), got.Version); err != nil {
+		t.Fatalf("ReplaceItem: %v", err)
+	}
+	got, err = c.Item(ctx, lib, created.Key)
+	if err != nil {
+		t.Fatalf("read after replace: %v", err)
+	}
+	if got.Title() != "zotgo replaced" {
+		t.Errorf("replaced title = %q, want zotgo replaced", got.Title())
+	}
+	if d, _ := got.ItemData(); len(d.Tags) != 0 {
+		t.Errorf("replace did not drop the prior tag (merged like patch?): %+v", d.Tags)
 	}
 
 	// Delete, then confirm it is gone (also cleans up the test item).
