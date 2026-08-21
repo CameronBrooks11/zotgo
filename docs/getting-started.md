@@ -36,6 +36,10 @@ Capabilities:
   ✓ connector-ingest
   ✓ local-file-access
 
+Libraries:
+  My Library          files ✓
+  Biological Reactor  files ✗  attachments not accepted
+
 Ready. zotgo can read your library.
 ```
 
@@ -44,6 +48,13 @@ unsupported capability carries its reason, so there is always something to act o
 `zot --json doctor` reports the same under `data.capabilities`, and exits non-zero
 when Zotero is unreachable — so a script can branch on the exit status without
 parsing the payload.
+
+The **Libraries** section (local endpoint only) reports, per library you can file
+into, whether it accepts attachment files. This is independent of the
+endpoint-level `local-file-access` capability: a group library can be writable yet
+have file storage disabled, so `local-file-access ✓` while a specific library is
+`files ✗`. That is why a library can silently never gain attachments. It appears
+under `data.libraries` in `--json`.
 
 If the Local API is off, `doctor` prints the exact steps to enable it:
 Zotero → Settings → Advanced → General → "Allow other applications on this

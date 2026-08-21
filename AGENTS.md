@@ -69,6 +69,11 @@ Anything inferred from Zotero's behaviour rather than observed — how a transla
 paginates, what a field means — belongs in the live suite; call the inference out
 (in the PR, the changelog) until a live run confirms it.
 
+Some live checks need seeded data or they no-op. The annotation check fails hard
+when `ZOTGO_LIVE_ANNOTATED_ATTACHMENT` names an attachment (PDF/EPUB) carrying at
+least a highlight and a note with distinct sort indexes; unset, it discovers or
+skips. Sync that attachment so the `--web` variant sees the same key.
+
 ## Conventions
 
 - Commit messages: Conventional Commits (`type(scope): description`), imperative

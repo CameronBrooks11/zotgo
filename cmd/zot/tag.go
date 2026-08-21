@@ -164,7 +164,12 @@ func itemTagAction(ctx context.Context, cmd *cli.Command, add bool) error {
 		}
 		return friendly(err)
 	}
-	data, _ := item.ItemData()
+	// A tag write is a full-array replace, so building it from a silently-empty
+	// tag set would wipe every existing tag. Never let a decode error through.
+	data, err := item.ItemData()
+	if err != nil {
+		return fmt.Errorf("inspect item %q before tagging: %w", itemKey, err)
+	}
 
 	var next []zotero.Tag
 	var changed []string

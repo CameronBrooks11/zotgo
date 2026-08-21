@@ -1,6 +1,11 @@
 # Design: write authority
 
-**Status:** Accepted / RFC — design settled, implementation not yet started.
+**Status:** Implemented. Phases 1–2 have shipped and are live-verified against a
+Zotero build with the local write API: `zot grant` leases, the deny-by-default
+authorizer at the write chokepoint, and `attachment import` are in the tool
+today, and phase 4's user documentation is in `writing.md`. Phase 3 (`--web`
+writes) remains a roadmap item — see the issue tracker. This document is kept as
+the design of record; the phased plan at the end records what has landed.
 
 This document defines how zotgo authorizes writes, so that a non-interactive
 caller — a script, a CI job, a cron sync, or an autonomous agent — can be given
@@ -197,12 +202,12 @@ flag-verbs).
 ### Checking — a deny-by-default authorizer at the write chokepoint
 
 Enforcement lives in **`internal/zotero` at the single `writeRequest`
-chokepoint**, not sprinkled across the eleven `cmd/` write actions. The `Client`
+chokepoint**, not sprinkled across the twelve `cmd/` write actions. The `Client`
 holds a `WriteAuthorizer` interface; a **nil authorizer denies**. `cmd/zot`
 injects an implementation that reads the lease file (keeping file/CLI logic out
 of the dependency-light client). Every write funnels through `writeRequest`, so a
-new or forgotten write path (the reason #52 had to be held) is structurally
-unable to skip the check.
+new or forgotten write path (the reason #52 was held before it merged) is
+structurally unable to skip the check.
 
 The write methods thread a `(library, operation)` scope descriptor to
 `writeRequest`. Ordering composes with the existing fail-fast layering:
@@ -273,18 +278,16 @@ gaps to hide:
 The audit file is same-user-writable, so it is a convenience/forensics record, not
 a tamper-resistant trail — stated plainly so it is not oversold.
 
-## How existing and pending write commands conform
+## How the write commands conform
 
 - `item create` / `patch` / `replace` / `delete`, `collection create` / `rename`
   / `move` / `delete`, `tag add` / `remove` / `delete` — each gets the centralized
   authorizer check (nothing per-command to add beyond threading the operation id).
   Their operation identifiers are the closed vocabulary in [Q3](#q3-operation-vocabulary).
-- **#52 `attachment import`** — the pending managed-file upload. Its code is
-  already reviewed clean (credential/redirect boundaries and staging TOCTOU
-  defenses verified); it is held only until it can require an
-  `attachment.import`-scoped lease. Once the authorizer lands at `writeRequest`,
-  #52 conforms by adding one operation identifier to the vocabulary — not a
-  rewrite.
+- **`attachment import`** (#52) — the managed-file upload. It conforms the same
+  way, adding the `attachment.import` operation identifier to the vocabulary
+  rather than a bespoke check; its credential/redirect boundaries and staging
+  TOCTOU defenses were verified in review before it merged.
 
 ## Resolved questions
 
@@ -387,7 +390,7 @@ in `docs/zotero-api.md`. Real-numeric-id canonicalization only becomes relevant 
 
 ## Phased rollout
 
-1. **Lease core.** The `0600` single-lease file (id, created, expires, library
+1. **Lease core.** *(Shipped.)* The `0600` single-lease file (id, created, expires, library
    scope, per-command operations, bound write key, note); `zot grant` /
    `grant status` / `grant revoke`, TTY-gated and tied to a successful Zotero
    authorize, with `--ttl` (30m default, documented max) and a printed pre-grant
@@ -397,16 +400,18 @@ in `docs/zotero-api.md`. Real-numeric-id canonicalization only becomes relevant 
    op; a canonical library token (`user:0` locally — see Q6); dimension-specific
    refusal sentinels; and an append-only JSONL audit of every decision (allowed and
    refused), surfaced by `grant status`.
-2. **#52 conforms.** Add `attachment.import` to the vocabulary; unblock and merge.
-3. **`--web` hardening.** Build the `--web` write path, then verify a
-   user-supplied library-scoped key (subset check, fail-closed on unmappable
-   identity). OAuth mint/revoke is **not** in scope — deferred indefinitely until
-   a concrete demand justifies the code.
-4. **Docs + harness belt.** Document the model (including the honest limitations
-   and the local-key residual) in `writing.md`; add the agent deny-rule guidance.
+2. **#52 conforms.** *(Shipped.)* Add `attachment.import` to the vocabulary;
+   unblock and merge.
+3. **`--web` hardening.** *(Roadmap — see the issue tracker.)* Build the `--web`
+   write path, then verify a user-supplied library-scoped key (subset check,
+   fail-closed on unmappable identity). OAuth mint/revoke is **not** in scope —
+   deferred indefinitely until a concrete demand justifies the code.
+4. **Docs + harness belt.** *(User docs shipped in `writing.md`.)* Document the
+   model (including the honest limitations and the local-key residual); add the
+   caller deny-rule guidance.
 
 Each phase is independently shippable and CI-gated, per the project's small-PR
-convention. The lease logic is unit-testable against fakes now, but per the
-project's iron rule the **release tag** gates on a live run against a Zotero built
-with the merged write API (zotero/zotero#5015): the authorize/key/precondition
-interplay the lease wraps is not yet verifiable live.
+convention. The lease logic is unit-tested against fakes, and per the project's
+iron rule the shipped phases were confirmed by a live run against a Zotero build
+with the write API (zotero/zotero#5015, released in Zotero 10.0): the
+authorize/key/precondition interplay the lease wraps is verified live.
