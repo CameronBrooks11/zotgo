@@ -13,6 +13,7 @@ zot show HRAC4E44              # one item with all direct attachments and notes
 zot attachment show ABCD1234   # attachment metadata
 zot note show NOTE1234         # one note with exact rich-text HTML
 zot relation list HRAC4E44     # one item's outgoing relations
+zot annotation list ABCD1234   # direct annotations on an attachment
 zot collection path COLL1234   # root-to-leaf collection ancestry
 zot collections               # collections as a tree (--flat for a list)
 zot stats                     # library-wide counts
@@ -28,6 +29,19 @@ leaf, preserving argument order and duplicates. Stable machine output carries an
 unambiguous `path` array of key/name segments. Human output joins names for
 reading only. The command uses the complete paginated collection index and
 rejects `--raw` because its result is derived from multiple records.
+
+## Annotations
+
+`zot annotation list ATTACHMENT_KEY` lists every direct annotation child of one
+attachment. Stable output is sorted in document order and carries the annotation
+key, parent attachment, type, page label, color, sort index, and presence flags
+for text and comments. It deliberately omits annotation bodies, position data,
+and image bytes. Use `--raw` when you explicitly need Zotero's complete
+annotation envelopes.
+
+The command follows every child page before writing output, so a later-page
+failure cannot leave a partial result on stdout. It does not recursively scan a
+bibliographic item's attachments; pass the attachment key you want to inspect.
 
 ## Attachments
 

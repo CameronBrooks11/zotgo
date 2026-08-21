@@ -21,6 +21,9 @@ Planned and outstanding work is tracked in the
   is recorded to the lease's audit log. `zot grant` must run in an interactive
   terminal (a human approves Zotero's authorize modal), so automation cannot mint
   its own lease. See [the design doc](docs/design/write-authority.md).
+- `zot annotation list ATTACHMENT_KEY` lists every direct annotation child in
+  document order with compact privacy-preserving metadata; `--raw` retains the
+  complete paginated Zotero envelopes.
 - `zot attachment show KEY` reports stable attachment metadata without reading
   or resolving attachment files; JSON/JSONL use the additive `attachment` DTO
   kind, while `--raw` preserves the complete Zotero item envelope after key and

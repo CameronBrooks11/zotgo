@@ -178,6 +178,57 @@ func assertLiveCollectionPath(t *testing.T, client *Client, library LibraryRef) 
 	t.Logf("collection %s: checked %d path segments", requested, len(paths[0].Segments))
 }
 
+func TestLiveAnnotationChildren(t *testing.T) {
+	assertLiveAnnotationChildren(t, liveClient(t), UserLibrary())
+}
+
+func assertLiveAnnotationChildren(t *testing.T, client *Client, library LibraryRef) {
+	t.Helper()
+	ctx := context.Background()
+	items, err := client.AllItems(ctx, library, ItemsOptions{ItemType: "annotation", Limit: 100})
+	if err != nil {
+		t.Fatalf("list annotations: %v", err)
+	}
+	if len(items) == 0 {
+		t.Skip("no annotations to exercise")
+	}
+	selectedRaw, err := json.Marshal(items[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected, err := DecodeAnnotation(selectedRaw)
+	if err != nil {
+		t.Fatalf("decode sampled annotation: %v", err)
+	}
+	rawChildren, err := client.AllRawAnnotations(ctx, library, selected.AttachmentKey)
+	if err != nil {
+		t.Fatalf("AllRawAnnotations: %v", err)
+	}
+	annotations, err := DecodeAnnotations(rawChildren, selected.AttachmentKey)
+	if err != nil {
+		t.Fatalf("DecodeAnnotations: %v", err)
+	}
+	found := false
+	for i, annotation := range annotations {
+		if annotation.Key == selected.Key {
+			found = true
+		}
+		if i > 0 {
+			previous := annotations[i-1]
+			if previous.SortIndex == "" && annotation.SortIndex != "" {
+				t.Fatalf("nonempty sort index follows empty one: %#v", annotations)
+			}
+			if previous.SortIndex != "" && annotation.SortIndex != "" && previous.SortIndex > annotation.SortIndex {
+				t.Fatalf("annotations not in document order: %#v", annotations)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("sampled annotation %s absent from parent child endpoint", selected.Key)
+	}
+	t.Logf("attachment %s: checked %d direct annotations", selected.AttachmentKey, len(annotations))
+}
+
 func TestLiveNotFound(t *testing.T) {
 	c := liveClient(t)
 	if _, err := c.Item(context.Background(), UserLibrary(), "ZZZZZZZZ"); err != ErrNotFound {

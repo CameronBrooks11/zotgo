@@ -90,6 +90,7 @@ func rootCommand() *cli.Command {
 			attachmentCommand(),
 			noteCommand(),
 			relationCommand(),
+			annotationCommand(),
 			collectionsCommand(),
 			statsCommand(),
 			exportCommand(),

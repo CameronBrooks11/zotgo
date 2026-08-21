@@ -80,7 +80,7 @@ Item routes exist under **both** `/api/users/:userID/…` and `/api/groups/:grou
 /api/users/:userID/items/trash                trashed
 /api/users/:userID/items/tags                 tags in item set
 /api/users/:userID/items/:itemKey             one item
-/api/users/:userID/items/:itemKey/children    attachments + notes
+/api/users/:userID/items/:itemKey/children    attachments + notes + annotations
 /api/users/:userID/items/:itemKey/file        302 redirect to the local file URL
 /api/users/:userID/items/:itemKey/file/view/url  local file URL
 /api/users/:userID/items/:itemKey/fulltext    full-text content (per item)

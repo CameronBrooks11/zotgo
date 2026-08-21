@@ -26,6 +26,8 @@ const (
 	KindRelations        Kind = "relations"
 	KindAttachment       Kind = "attachment"
 	KindAttachmentImport Kind = "attachment-import"
+	KindAnnotation       Kind = "annotation"
+	KindAnnotations      Kind = "annotations"
 	KindNote             Kind = "note"
 	KindCollection       Kind = "collection"
 	KindCollections      Kind = "collections"
