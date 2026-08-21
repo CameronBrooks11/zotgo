@@ -170,13 +170,14 @@ the bytes correctly.
 
 ---
 
-### Local write contract (MERGED to zotero main 2026-07-28, unreleased)
+### Local write contract (released in Zotero 10.0)
 
-`zotero/zotero#5015` was **merged** (as commits 9dd17a2, 77f2432, a37a9e7;
-dstillman finished AbeJellinek's branch). Read from the merged
-`server_localAPI.js`, so **observed in code**, not inferred — but **not in any
-release**: Zotero 9.0.4 does not have it, so per the iron rule zotgo cannot ship
-writes until we can run against a Zotero built with these commits.
+`zotero/zotero#5015` (commits 9dd17a2, 77f2432, a37a9e7; dstillman finished
+AbeJellinek's branch) added the local write API, and it ships in **Zotero 10.0**.
+zotgo's write support is live-verified against that build. Writes activate only
+when the running Zotero exposes the write endpoints (the `Zotero-Server-ID`
+header is the probe signal); on an older build, write commands fail fast with the
+same explanation `doctor` gives, and `--dry-run` still works.
 
 **Endpoints & methods** (mirror Web API v3 write semantics):
 - `POST /api/local/authorize` — obtain a **local API key** (local-only; no web
