@@ -16,7 +16,10 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          # Lint under a modern toolchain: staticcheck v0.8.0 requires Go >= 1.26
+          # to build. This is the linter's runtime only; the language/compat floor
+          # stays at go.mod's `go 1.23`, which the test matrix (oldstable) verifies.
+          go-version: stable
           cache: true
       - uses: extractions/setup-just@v4
       - run: just check
