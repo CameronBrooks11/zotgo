@@ -217,6 +217,25 @@ func TestTagAddMachineNoChangeEmitsUnchanged(t *testing.T) {
 	}
 }
 
+// A tag write is a full-array replace, so an undecodable existing tag set must
+// abort with an error — never silently build the patch from zero tags and wipe
+// every tag the item already had.
+func TestTagAddFailsClosedWhenExistingTagsUndecodable(t *testing.T) {
+	storeItemWriteKey(t)
+	// tags is a JSON string, not an array: ItemData() cannot decode it.
+	fake := &tagWriteFake{itemTags: `"corrupt"`}
+	srv := newTagWriteFake(t, fake)
+	defer srv.Close()
+
+	_, _, err := runCLI(srv.URL, "tag", "add", "new", "--item", "ITEM0001", "--yes")
+	if err == nil {
+		t.Fatal("expected an error when the item's tags cannot be decoded, got nil")
+	}
+	if fake.patches.Load() != 0 {
+		t.Fatalf("a decode failure must not write: saw %d PATCH(es) — tags would have been wiped", fake.patches.Load())
+	}
+}
+
 func TestTagAddMachineDeduplicatesRepeatedName(t *testing.T) {
 	storeItemWriteKey(t)
 	fake := &tagWriteFake{}
