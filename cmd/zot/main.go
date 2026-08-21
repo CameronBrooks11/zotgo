@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 
 	"github.com/urfave/cli/v3"
 
@@ -20,6 +21,23 @@ import (
 
 // version is overridden at release time via -ldflags "-X main.version=...".
 var version = "dev"
+
+// resolveVersion reports the build's version. Release archives stamp it via
+// ldflags; a `go install …@vX.Y.Z` build does not, but the Go toolchain records
+// the module version in the binary, so fall back to that rather than reporting
+// "dev". A plain in-module `go build`/`go run` has module version "(devel)",
+// which we leave as "dev".
+func resolveVersion() string {
+	if version != "dev" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if v := info.Main.Version; v != "" && v != "(devel)" {
+			return v
+		}
+	}
+	return version
+}
 
 func main() {
 	err := rootCommand().Run(context.Background(), os.Args)
@@ -41,7 +59,7 @@ func rootCommand() *cli.Command {
 	return &cli.Command{
 		Name:                  "zot",
 		Usage:                 "a CLI for a running Zotero 7+, over its HTTP API",
-		Version:               version,
+		Version:               resolveVersion(),
 		EnableShellCompletion: true,
 		// main() owns error printing and exit codes; keep urfave from also
 		// printing or calling os.Exit.
