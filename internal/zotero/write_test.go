@@ -298,9 +298,9 @@ func TestCreateItemsReturningKeysIgnoresUnrelatedEnvelopeFields(t *testing.T) {
 		}`))
 	}))
 	defer srv.Close()
-	client := New(srv.URL)
+	client := writeTestClient(srv.URL)
 	client.SetLocalKey("key")
-	result, err := client.CreateItemsReturningKeys(context.Background(), UserLibrary(), []json.RawMessage{
+	result, err := client.CreateItemsReturningKeys(context.Background(), OpAttachmentImport, UserLibrary(), []json.RawMessage{
 		json.RawMessage(`{"itemType":"attachment","linkMode":"imported_file"}`),
 	})
 	if err != nil {
@@ -326,12 +326,12 @@ func TestCreateItemsReturningKeysMarksSuccessfulBodyReadFailureUnknown(t *testin
 			Body:       io.NopCloser(body),
 		}, nil
 	})}
-	client := New("http://local.test", WithHTTPClient(httpClient))
+	client := writeTestClient("http://local.test", WithHTTPClient(httpClient))
 	client.SetLocalKey("key")
 	header := make(http.Header)
 	header.Set("Zotero-Server-ID", "SERVERID1234")
 	client.captureServerID(header)
-	_, err := client.CreateItemsReturningKeys(context.Background(), UserLibrary(), []json.RawMessage{
+	_, err := client.CreateItemsReturningKeys(context.Background(), OpAttachmentImport, UserLibrary(), []json.RawMessage{
 		json.RawMessage(`{"itemType":"attachment","linkMode":"imported_file"}`),
 	})
 	if !errors.Is(err, ErrWriteOutcomeUnknown) {
@@ -348,9 +348,9 @@ func TestCreateItemsReturningKeysMarksMalformedSuccessUnknown(t *testing.T) {
 		_, _ = w.Write([]byte(`{"successful":`))
 	}))
 	defer srv.Close()
-	client := New(srv.URL)
+	client := writeTestClient(srv.URL)
 	client.SetLocalKey("key")
-	_, err := client.CreateItemsReturningKeys(context.Background(), UserLibrary(), []json.RawMessage{
+	_, err := client.CreateItemsReturningKeys(context.Background(), OpAttachmentImport, UserLibrary(), []json.RawMessage{
 		json.RawMessage(`{"itemType":"attachment","linkMode":"imported_file"}`),
 	})
 	if !errors.Is(err, ErrWriteOutcomeUnknown) {

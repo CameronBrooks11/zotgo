@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,16 +15,36 @@ import (
 )
 
 func TestLiveAttachmentImportPDFAndPNG(t *testing.T) {
-	key := loadLocalKey()
-	if key == "" {
-		t.Skip("no remembered Local API key; authorize a write with Always Allow first")
+	base := os.Getenv("ZOTGO_BASE_URL")
+	if base == "" {
+		base = "http://localhost:23119"
 	}
-	client := zotero.New(os.Getenv("ZOTGO_BASE_URL"))
-	client.SetLocalKey(key)
-	if health := client.CheckHealth(context.Background()); !health.Ready() {
+	client := zotero.New(base)
+	ctx := context.Background()
+	health := client.CheckHealth(ctx)
+	if !health.Ready() {
 		t.Skipf("Zotero is not ready: %+v", health)
 	}
-	ctx := context.Background()
+	if !health.Supports(zotero.CapabilityWrite) {
+		t.Skip("this Zotero build has no local write API; run against a write-capable build")
+	}
+
+	t.Log("Authorizing — click **Always Allow** in Zotero's prompt…")
+	remember, err := client.Authorize(ctx, "zotgo live attachment import")
+	if err != nil {
+		t.Fatalf("Authorize: %v", err)
+	}
+	if !remember {
+		t.Fatal("got a single-use key (you clicked \"Allow\"); this test needs a persistent key — re-run and click \"Always Allow\"")
+	}
+
+	// Parent create and cleanup are test scaffolding driven directly through this
+	// client, so it is its own authority; the import under test runs through the
+	// CLI, gated by a seeded lease carrying the same authorized key.
+	client.SetWriteAuthorizer(zotero.AllowAllWrites())
+	t.Setenv("ZOTGO_CONFIG_DIR", t.TempDir())
+	seedLiveImportLease(t, client.LocalKey())
+
 	library := zotero.UserLibrary()
 	marker := fmt.Sprintf("zotgo live managed attachment import %d", time.Now().UnixNano())
 	parentKey := ""
@@ -34,10 +53,7 @@ func TestLiveAttachmentImportPDFAndPNG(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	parentResult, err := client.CreateItemsReturningKeys(ctx, library, []json.RawMessage{parentBody})
-	if errors.Is(err, zotero.ErrWriteUnauthorized) {
-		t.Skip("remembered Local API key was revoked; reauthorize with Always Allow before running live import")
-	}
+	parentResult, err := client.CreateItemsReturningKeys(ctx, zotero.OpItemCreate, library, []json.RawMessage{parentBody})
 	if err != nil || len(parentResult.Failed) != 0 {
 		t.Fatalf("create parent: result=%+v err=%v", parentResult, err)
 	}
@@ -187,7 +203,24 @@ func cleanupLiveAttachmentImport(t *testing.T, client *zotero.Client, library zo
 		t.Errorf("cleanup library version: %v", err)
 		return
 	}
-	if err := client.DeleteItems(ctx, library, keys, version); err != nil {
+	if err := client.DeleteItems(ctx, zotero.OpItemDelete, library, keys, version); err != nil {
 		t.Errorf("cleanup items %v: %v", keys, err)
+	}
+}
+
+// seedLiveImportLease writes a lease permitting attachment.import, carrying the
+// live-authorized key, into the test's config dir so the CLI import path is
+// authorized non-interactively.
+func seedLiveImportLease(t *testing.T, key string) {
+	t.Helper()
+	l := &lease{
+		ID:       "lease_live_import",
+		Created:  time.Now(),
+		Expires:  time.Now().Add(30 * time.Minute),
+		Scope:    leaseScope{Libraries: []string{libraryToken(zotero.UserLibrary())}, Operations: []string{string(zotero.OpAttachmentImport)}},
+		WriteKey: key,
+	}
+	if err := saveLease(l); err != nil {
+		t.Fatalf("saveLease: %v", err)
 	}
 }

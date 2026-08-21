@@ -325,7 +325,7 @@ func (c *Client) writeBatch(ctx context.Context, op Operation, lib LibraryRef, p
 	if len(objs) == 0 {
 		return WriteResult{}, nil
 	}
-	body, err := c.writeBatchResponse(ctx, path, objs)
+	body, err := c.writeBatchResponse(ctx, op, lib, path, objs)
 	if err != nil {
 		return WriteResult{}, err
 	}

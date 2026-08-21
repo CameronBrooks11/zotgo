@@ -73,9 +73,6 @@ func attachmentImportAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 	libraryDTO := output.NewLibrary(library)
-	if key := loadLocalKey(); key != "" {
-		client.SetLocalKey(key)
-	}
 	if err := validateAttachmentParent(ctx, client, library, parentKey); err != nil {
 		return err
 	}
@@ -114,10 +111,12 @@ func attachmentImportAction(ctx context.Context, cmd *cli.Command) error {
 		}
 	}
 
-	if err := ensureRememberedLocalKey(ctx, cmd, client); err != nil {
+	if err := ensureImportWriteAuthority(ctx, cmd, client, mode); err != nil {
 		record.Status = "failed"
+		// The authority errors (missing/expired/out-of-scope lease, no write API)
+		// are curated, actionable messages — surface them rather than a generic line.
 		return finishAttachmentImportFailure(cmd, mode, libraryDTO, record,
-			"authorization-required", "managed import requires remembered Zotero authorization")
+			"authorization-required", err.Error())
 	}
 
 	attachmentKey, err := createImportedAttachmentMetadata(ctx, client, library, parentKey, title, sourceURL, staged.contentType)
@@ -252,7 +251,26 @@ func findDuplicateAttachment(ctx context.Context, client *zotero.Client, library
 	return &matches[0], nil
 }
 
+// ensureImportWriteAuthority establishes authority for a managed import. An
+// interactive human is their own authority but must choose "Always Allow" (the
+// import performs several authenticated phases, and a single-use key would be
+// spent on the first). A non-interactive import requires a write lease permitting
+// attachment.import; its bound key is persistent, so the multi-phase flow works.
+func ensureImportWriteAuthority(ctx context.Context, cmd *cli.Command, client *zotero.Client, mode output.Mode) error {
+	if err := client.RequireWriteCapability(ctx); err != nil {
+		return writeFriendly(err)
+	}
+	if writeIsInteractive(cmd, mode) {
+		client.SetWriteAuthorizer(zotero.AllowAllWrites())
+		return ensureRememberedLocalKey(ctx, cmd, client)
+	}
+	return installLeaseAuthority(client)
+}
+
 func ensureRememberedLocalKey(ctx context.Context, cmd *cli.Command, client *zotero.Client) error {
+	if k := loadLocalKey(); k != "" {
+		client.SetLocalKey(k)
+	}
 	if client.HasLocalKey() {
 		return nil
 	}
@@ -282,7 +300,7 @@ func createImportedAttachmentMetadata(ctx context.Context, client *zotero.Client
 	if err != nil {
 		return "", fmt.Errorf("encode attachment metadata: %w", err)
 	}
-	result, err := client.CreateItemsReturningKeys(ctx, library, []json.RawMessage{body})
+	result, err := client.CreateItemsReturningKeys(ctx, zotero.OpAttachmentImport, library, []json.RawMessage{body})
 	if err != nil {
 		return "", writeFriendly(err)
 	}

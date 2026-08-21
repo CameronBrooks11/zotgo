@@ -87,7 +87,7 @@ func TestAttachmentUploadFullSequence(t *testing.T) {
 	defer srv.Close()
 	baseURL = srv.URL
 
-	client := New(srv.URL)
+	client := writeTestClient(srv.URL)
 	client.SetLocalKey(apiKey)
 	metadata := AttachmentUploadMetadata{
 		MD5: md5, Filename: "image.png", Size: int64(len(content)), MTime: 1700000000000, ContentType: "image/png",
@@ -145,7 +145,7 @@ func TestAuthorizeAttachmentUploadExists(t *testing.T) {
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	client := New(srv.URL)
+	client := writeTestClient(srv.URL)
 	client.SetLocalKey("key")
 	authorization, err := client.AuthorizeAttachmentUpload(context.Background(), UserLibrary(), "ATTACH01", AttachmentUploadMetadata{
 		MD5: strings.Repeat("a", 32), Filename: "paper.pdf", Size: 1, MTime: 1700000000000,
@@ -171,7 +171,7 @@ func TestAuthorizeAttachmentUploadGroupRoute(t *testing.T) {
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	client := New(srv.URL)
+	client := writeTestClient(srv.URL)
 	client.SetLocalKey("key")
 	authorization, err := client.AuthorizeAttachmentUpload(context.Background(), GroupLibrary(42, "Research"), "GROUPATT", AttachmentUploadMetadata{
 		MD5: strings.Repeat("a", 32), Filename: "paper.pdf", Size: 1, MTime: 1700000000000,
@@ -214,7 +214,7 @@ func TestAttachmentUploadMetadataValidation(t *testing.T) {
 }
 
 func TestValidateLocalUploadURL(t *testing.T) {
-	client := New("http://LOCALHOST:23119")
+	client := writeTestClient("http://LOCALHOST:23119")
 	const key = "UPLOADKEY"
 	good := "http://localhost:23119/api/local/uploads/" + key
 	if err := client.validateLocalUploadURL(good, key); err != nil {
@@ -264,7 +264,7 @@ func TestAttachmentFileRouteEscapesKeyAndOmitsEmptyContentType(t *testing.T) {
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	client := New(srv.URL)
+	client := writeTestClient(srv.URL)
 	client.SetLocalKey("key")
 
 	got, err := client.AuthorizeAttachmentUpload(context.Background(), UserLibrary(), "ATTACH/01", AttachmentUploadMetadata{
@@ -291,7 +291,7 @@ func TestUploadAuthorizedAttachmentDoesNotFollowRedirect(t *testing.T) {
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	client := New(srv.URL)
+	client := writeTestClient(srv.URL)
 	err := client.UploadAuthorizedAttachment(context.Background(), AttachmentUploadAuthorization{
 		URL: srv.URL + "/api/local/uploads/UPLOADKEY", UploadKey: "UPLOADKEY",
 	}, bytes.NewReader([]byte("x")), 1)
@@ -309,7 +309,7 @@ func TestUploadAuthorizedAttachmentRequires201(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer srv.Close()
-	client := New(srv.URL)
+	client := writeTestClient(srv.URL)
 	err := client.UploadAuthorizedAttachment(context.Background(), AttachmentUploadAuthorization{
 		URL: srv.URL + "/api/local/uploads/UPLOAD", UploadKey: "UPLOAD",
 	}, strings.NewReader(""), 0)
@@ -337,7 +337,7 @@ func TestAttachmentFileFormDoesNotFollowRedirect(t *testing.T) {
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	client := New(srv.URL)
+	client := writeTestClient(srv.URL)
 	client.SetLocalKey("key")
 	_, err := client.AuthorizeAttachmentUpload(context.Background(), UserLibrary(), "ATTACH01", AttachmentUploadMetadata{
 		MD5: strings.Repeat("a", 32), Filename: "paper.pdf", Size: 1, MTime: 1700000000000,
@@ -371,7 +371,7 @@ func TestAttachmentFileFormErrors(t *testing.T) {
 			})
 			srv := httptest.NewServer(mux)
 			defer srv.Close()
-			client := New(srv.URL)
+			client := writeTestClient(srv.URL)
 			client.SetLocalKey("key")
 			_, err := client.AuthorizeAttachmentUpload(context.Background(), UserLibrary(), "ATTACH01", AttachmentUploadMetadata{
 				MD5: strings.Repeat("a", 32), Filename: "paper.pdf", Size: 1, MTime: 1700000000000,
@@ -411,7 +411,7 @@ func TestAuthorizeAttachmentUploadRejectsMalformedResponse(t *testing.T) {
 			srv := httptest.NewServer(mux)
 			defer srv.Close()
 			baseURL = srv.URL
-			client := New(srv.URL)
+			client := writeTestClient(srv.URL)
 			client.SetLocalKey("key")
 			_, err := client.AuthorizeAttachmentUpload(context.Background(), UserLibrary(), "ATTACH01", AttachmentUploadMetadata{
 				MD5: strings.Repeat("a", 32), Filename: "paper.pdf", Size: 1, MTime: 1700000000000,
@@ -439,7 +439,7 @@ func TestAttachmentUploadDoesNotRequireServerIDCapabilitySignal(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	client := New(srv.URL)
+	client := writeTestClient(srv.URL)
 	client.SetLocalKey("key")
 	got, err := client.AuthorizeAttachmentUpload(context.Background(), UserLibrary(), "ATTACH01", AttachmentUploadMetadata{
 		MD5: strings.Repeat("a", 32), Filename: "paper.pdf", Size: 0, MTime: 0,
@@ -469,7 +469,7 @@ func TestAttachmentUploadMethodsAreLocalOnly(t *testing.T) {
 }
 
 func TestUploadAuthorizedAttachmentValidationAndExistsNoOp(t *testing.T) {
-	client := New("http://localhost:23119")
+	client := writeTestClient("http://localhost:23119")
 	if err := client.UploadAuthorizedAttachment(context.Background(), AttachmentUploadAuthorization{Exists: true}, nil, -1); err != nil {
 		t.Fatalf("exists authorization should be a no-op: %v", err)
 	}
@@ -507,7 +507,7 @@ func TestRegisterAttachmentUploadRequires204AndEncodesKey(t *testing.T) {
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	client := New(srv.URL)
+	client := writeTestClient(srv.URL)
 	client.SetLocalKey("key")
 
 	err := client.RegisterAttachmentUpload(context.Background(), UserLibrary(), "ATTACH01", "UPLOAD+KEY")
@@ -527,7 +527,7 @@ func TestAttachmentUploadTransportErrorsAreClassified(t *testing.T) {
 	srv := httptest.NewServer(http.NewServeMux())
 	baseURL := srv.URL
 	srv.Close()
-	client := New(baseURL)
+	client := writeTestClient(baseURL)
 
 	err := client.UploadAuthorizedAttachment(context.Background(), AttachmentUploadAuthorization{
 		URL: baseURL + "/api/local/uploads/UPLOAD", UploadKey: "UPLOAD",
@@ -543,5 +543,57 @@ func TestAttachmentUploadTransportErrorsAreClassified(t *testing.T) {
 	})
 	if !errors.Is(err, ErrZoteroDown) {
 		t.Fatalf("authorize error = %v, want ErrZoteroDown", err)
+	}
+}
+
+// The upload writes build their own request and bypass writeRequest, so they must
+// consult the WriteAuthorizer themselves. With none installed they fail closed
+// before any network I/O — proven by pointing at an unreachable URL and still
+// getting ErrWriteNotAuthorized rather than a dial error.
+func TestAttachmentUploadFailsClosedWithoutAuthorizer(t *testing.T) {
+	client := New("http://127.0.0.1:0") // deny-by-default: no authorizer
+	client.SetLocalKey("K")
+	meta := AttachmentUploadMetadata{MD5: strings.Repeat("a", 32), Filename: "paper.pdf", Size: 1, MTime: 1}
+	if _, err := client.AuthorizeAttachmentUpload(context.Background(), UserLibrary(), "ATTACH01", meta); !errors.Is(err, ErrWriteNotAuthorized) {
+		t.Fatalf("AuthorizeAttachmentUpload err = %v, want ErrWriteNotAuthorized", err)
+	}
+	if err := client.RegisterAttachmentUpload(context.Background(), UserLibrary(), "ATTACH01", "UPLOADKEY"); !errors.Is(err, ErrWriteNotAuthorized) {
+		t.Fatalf("RegisterAttachmentUpload err = %v, want ErrWriteNotAuthorized", err)
+	}
+}
+
+// The upload writes authorize as attachment.import against the target library, so
+// a lease scoped to that operation gates them (and a swapped op would be caught).
+func TestAttachmentUploadAuthorizerSeesImportOperation(t *testing.T) {
+	group := GroupLibrary(42, "Team")
+	cases := []struct {
+		name string
+		call func(*Client) error
+	}{
+		{"authorize-upload", func(c *Client) error {
+			_, err := c.AuthorizeAttachmentUpload(context.Background(), group, "ATTACH01",
+				AttachmentUploadMetadata{MD5: strings.Repeat("a", 32), Filename: "paper.pdf", Size: 1, MTime: 1})
+			return err
+		}},
+		{"register", func(c *Client) error {
+			return c.RegisterAttachmentUpload(context.Background(), group, "ATTACH01", "UPLOADKEY")
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := &recordingAuthorizer{err: errors.New("stop")}
+			c := New("http://127.0.0.1:0") // denial precedes any network
+			c.SetWriteAuthorizer(rec)
+			c.SetLocalKey("K")
+			if err := tc.call(c); !errors.Is(err, rec.err) {
+				t.Fatalf("err = %v, want the authorizer's sentinel", err)
+			}
+			if rec.gotOp != OpAttachmentImport {
+				t.Errorf("operation = %q, want %q", rec.gotOp, OpAttachmentImport)
+			}
+			if rec.gotLib != group {
+				t.Errorf("library = %+v, want %+v", rec.gotLib, group)
+			}
+		})
 	}
 }

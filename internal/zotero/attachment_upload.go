@@ -184,6 +184,12 @@ func (c *Client) attachmentFileFormRequest(ctx context.Context, library LibraryR
 	if attachmentKey == "" {
 		return 0, nil, errors.New("attachment key is required")
 	}
+	// These writes build their own request rather than going through writeRequest,
+	// so gate them explicitly on the same write authority (attachment.import), and
+	// before any network I/O — otherwise they would bypass the lease and its audit.
+	if err := c.authorizeWrite(OpAttachmentImport, library); err != nil {
+		return 0, nil, err
+	}
 	if err := c.ensureServerID(ctx); err != nil {
 		return 0, nil, err
 	}

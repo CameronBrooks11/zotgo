@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
@@ -312,6 +313,8 @@ func saveImportTestKey(t *testing.T) {
 	if err := saveLocalKey("persistent-key"); err != nil {
 		t.Fatalf("saveLocalKey: %v", err)
 	}
+	// A non-interactive import now needs a lease permitting attachment.import.
+	seedWriteLease(t)
 }
 
 func importArgs(path string) []string {
@@ -780,21 +783,38 @@ func TestAttachmentImportGroupDryRunUsesGroupRoutes(t *testing.T) {
 	}
 }
 
-func TestAttachmentImportRequiresRememberedAuthorization(t *testing.T) {
+// A non-interactive import with no write lease fails closed before any write or
+// authorization, reporting the missing lease.
+func TestAttachmentImportWithoutLeaseFailsClosed(t *testing.T) {
 	path := writeAttachmentTestPDF(t)
-	t.Setenv("ZOTGO_CONFIG_DIR", t.TempDir())
-	srv, state := newAttachmentImportServer(t, importServerOptions{oneTimeAuthorization: true})
+	t.Setenv("ZOTGO_CONFIG_DIR", t.TempDir()) // config dir set, but no lease seeded
+	srv, state := newAttachmentImportServer(t, importServerOptions{})
 	defer srv.Close()
-	out, errOut, err := runCLI(srv.URL, importArgs(path)...)
+	out, _, err := runCLI(srv.URL, importArgs(path)...)
 	var exitErr cli.ExitCoder
 	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
 		t.Fatalf("error = %v", err)
 	}
-	if !strings.Contains(out, `"code": "authorization-required"`) || !strings.Contains(errOut, "Always Allow") {
-		t.Fatalf("output = %s\nstderr = %s", out, errOut)
+	if !strings.Contains(out, `"code": "authorization-required"`) || !strings.Contains(out, "no active write lease") {
+		t.Fatalf("output = %s", out)
 	}
-	if state.authorizations != 1 || state.writes != 0 {
-		t.Fatalf("authorization state = %#v", state)
+	if state.authorizations != 0 || state.writes != 0 {
+		t.Fatalf("a lease-less import touched Zotero: %#v", state)
+	}
+}
+
+// Interactive import is the human's own authority but still needs "Always Allow":
+// the multi-phase flow reuses the key, and a single-use grant would be spent on
+// the first write. ensureRememberedLocalKey enforces this directly.
+func TestImportInteractiveRequiresAlwaysAllow(t *testing.T) {
+	t.Setenv("ZOTGO_CONFIG_DIR", t.TempDir())
+	srv, _ := newAttachmentImportServer(t, importServerOptions{oneTimeAuthorization: true})
+	defer srv.Close()
+	client := zotero.New(srv.URL)
+	cmd := &cli.Command{ErrWriter: io.Discard}
+	err := ensureRememberedLocalKey(context.Background(), cmd, client)
+	if err == nil || !strings.Contains(err.Error(), "Always Allow") {
+		t.Fatalf("err = %v, want an Always-Allow requirement", err)
 	}
 }
 
