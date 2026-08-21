@@ -264,11 +264,16 @@ func (l *Link) UnmarshalJSON(data []byte) error {
 
 // ItemData contains the stable item fields zotgo needs for display and tests.
 type ItemData struct {
-	Key         string    `json:"key"`
-	Version     int       `json:"version"`
-	ItemType    string    `json:"itemType"`
-	Title       string    `json:"title"`
-	Date        string    `json:"date"`
+	Key          string `json:"key"`
+	Version      int    `json:"version"`
+	ItemType     string `json:"itemType"`
+	Title        string `json:"title"`
+	Date         string `json:"date"`
+	DateAdded    string `json:"dateAdded"`
+	DateModified string `json:"dateModified"`
+	// ParentItem is the parent's key on a child item (attachment/note/annotation);
+	// empty on a top-level item.
+	ParentItem  string    `json:"parentItem"`
 	Creators    []Creator `json:"creators"`
 	Tags        []Tag     `json:"tags"`
 	Collections []string  `json:"collections"`

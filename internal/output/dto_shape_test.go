@@ -25,6 +25,41 @@ func marshalToMap(t *testing.T, v any) map[string]any {
 	return m
 }
 
+func TestNewItemCarriesTimestampsAndParent(t *testing.T) {
+	e := zotero.Envelope{
+		Key:  "CHILD001",
+		Data: json.RawMessage(`{"key":"CHILD001","itemType":"attachment","title":"PDF","dateAdded":"2020-01-02T03:04:05Z","dateModified":"2021-06-07T08:09:10Z","parentItem":"PARENT01"}`),
+	}
+	m := marshalToMap(t, NewItem(e))
+	if m["dateAdded"] != "2020-01-02T03:04:05Z" {
+		t.Errorf("dateAdded = %v", m["dateAdded"])
+	}
+	if m["dateModified"] != "2021-06-07T08:09:10Z" {
+		t.Errorf("dateModified = %v", m["dateModified"])
+	}
+	if m["parentKey"] != "PARENT01" {
+		t.Errorf("parentKey = %v, want the child's parent", m["parentKey"])
+	}
+}
+
+func TestNewItemTopLevelOmitsParentKeyButKeepsTimestamps(t *testing.T) {
+	e := zotero.Envelope{
+		Key:  "TOP00001",
+		Data: json.RawMessage(`{"key":"TOP00001","itemType":"book","title":"B","dateAdded":"2020-01-01T00:00:00Z","dateModified":"2020-01-01T00:00:00Z"}`),
+	}
+	m := marshalToMap(t, NewItem(e))
+	if _, ok := m["parentKey"]; ok {
+		t.Error("a top-level item must omit parentKey")
+	}
+	// dateAdded/dateModified are the change-detection primitive: always present.
+	if _, ok := m["dateAdded"]; !ok {
+		t.Error("dateAdded must always be present")
+	}
+	if _, ok := m["dateModified"]; !ok {
+		t.Error("dateModified must always be present")
+	}
+}
+
 func TestNewStatsShape(t *testing.T) {
 	m := marshalToMap(t, NewStats(zotero.Stats{Items: 42, TopItems: 30, Collections: 5, Tags: 7}))
 	for key, want := range map[string]float64{"items": 42, "topItems": 30, "collections": 5, "tags": 7} {
