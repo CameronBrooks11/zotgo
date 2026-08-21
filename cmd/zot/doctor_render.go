@@ -109,6 +109,31 @@ func renderCapabilities(w io.Writer, caps []zotero.CapabilityStatus) {
 	}
 }
 
+// renderLibraries lists, per library the running Zotero can file into, whether
+// it accepts attachment files. It is silent when there is nothing to report
+// (the probe failed, or the endpoint is the Web API), so a clean run is not
+// cluttered. The endpoint-level local-file-access capability can be ✓ while a
+// specific group here is ✗ — that gap is the whole point of the section.
+func renderLibraries(w io.Writer, libraries []zotero.LibraryFiles) {
+	if len(libraries) == 0 {
+		return
+	}
+	width := 0
+	for _, l := range libraries {
+		if len(l.Name) > width {
+			width = len(l.Name)
+		}
+	}
+	fmt.Fprint(w, "\nLibraries:\n")
+	for _, l := range libraries {
+		if l.FilesEditable {
+			fmt.Fprintf(w, "  %-*s  files %s\n", width, l.Name, check)
+			continue
+		}
+		fmt.Fprintf(w, "  %-*s  files %s  attachments not accepted\n", width, l.Name, cross)
+	}
+}
+
 const (
 	check = "✓"
 	cross = "✗"

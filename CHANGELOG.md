@@ -12,6 +12,13 @@ Planned and outstanding work is tracked in the
 
 ### Added
 
+- `zot doctor` now reports per-library attachment-file editability under a
+  **Libraries** section (local endpoint; `data.libraries` in `--json`). A group
+  library can be writable yet refuse files, which `local-file-access` alone
+  cannot show — so a library that silently never gains attachments is now
+  diagnosable. It costs one `POST /connector/getSelectedCollection` and carries
+  no ingestion semantics.
+
 - `zot grant` mints a human-approved **write lease** so non-interactive writes
   (from a script, CI job, or agent) are bounded, time-boxed, and audited instead
   of unrestricted. Non-interactive writes (`--yes` or machine output) now require
