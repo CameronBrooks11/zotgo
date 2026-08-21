@@ -213,24 +213,33 @@ func validateAttachmentParent(ctx context.Context, client *zotero.Client, librar
 }
 
 func findDuplicateAttachment(ctx context.Context, client *zotero.Client, library zotero.LibraryRef, parentKey, checksum string, size int64) (*zotero.Attachment, error) {
-	// On the Local API's unfiltered /items route, an itemKey scope includes the
-	// keyed item's children; itemType=attachment leaves its direct attachments.
-	// AllItems supplies the shared pagination/backoff loop without duplicating
-	// the child transport that is being developed separately.
-	envelopes, err := client.AllItems(ctx, library, zotero.ItemsOptions{
-		ItemKeys: []string{parentKey}, ItemType: "attachment", Limit: 100,
+	// Read only the parent's direct attachment children, via the children route.
+	// The unfiltered /items route drops an itemKey scope the moment itemType is
+	// added (verified on Zotero 9.0.6: itemKey=K&itemType=attachment returns the
+	// whole library, not K's children), which made this scan walk every
+	// attachment and abort on the first one under a different parent (#80). The
+	// children route scopes correctly and is the same transport `zot show` uses.
+	raws, err := client.AllRawChildItems(ctx, library, parentKey, zotero.ChildItemsOptions{
+		ItemType: "attachment", Limit: 100,
 	})
 	if err != nil {
 		return nil, friendly(err)
 	}
 	matches := make([]zotero.Attachment, 0)
-	for i, envelope := range envelopes {
+	for i, raw := range raws {
+		var envelope zotero.Envelope
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			return nil, fmt.Errorf("decode child attachment %d: %w", i, err)
+		}
 		attachment, err := envelope.AttachmentData()
 		if err != nil {
 			return nil, fmt.Errorf("decode child attachment %d: %w", i, err)
 		}
+		// The children route already scopes to this parent; skip anything foreign
+		// defensively rather than aborting, so a future transport change can never
+		// resurrect #80 as a hard failure.
 		if attachment.ParentKey != parentKey {
-			return nil, fmt.Errorf("attachment %q reports parent %q, expected %q", attachment.Key, attachment.ParentKey, parentKey)
+			continue
 		}
 		if enclosure, ok := envelope.Links["enclosure"]; ok && enclosure.Href != "" {
 			attachment.Enclosure = &zotero.AttachmentEnclosure{

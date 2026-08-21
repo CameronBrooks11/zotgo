@@ -10,6 +10,17 @@ Planned and outstanding work is tracked in the
 
 ## [Unreleased]
 
+### Fixed
+
+- `zot attachment import` no longer fails on a populated library. Its
+  duplicate-detection scan queried the unscoped `/items` route with
+  `itemKey`+`itemType`, but Zotero drops the `itemKey` scope once `itemType` is
+  added — so the scan walked the entire library and aborted on the first
+  attachment under a different parent (it failed on essentially every real
+  library, `--dry-run` included). It now reads the parent's children directly
+  (the `/items/KEY/children` route, the same transport `zot show` uses) and
+  skips any foreign record instead of aborting.
+
 ### Added
 
 - Item records in machine output now carry `dateAdded` and `dateModified`
