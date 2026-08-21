@@ -15,6 +15,8 @@ func searchCommand() *cli.Command {
 		Name:      "search",
 		Usage:     "search items by text",
 		ArgsUsage: "<query>",
+		Description: "Search title, creator, and year by default. Use --everything for full text and notes, " +
+			"and --limit 0 for every result page.",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{Name: "everything", Aliases: []string{"e"}, Usage: "search full text and notes, not just title/creator/year"},
 			&cli.StringFlag{Name: "type", Usage: "filter by item type (e.g. journalArticle)"},

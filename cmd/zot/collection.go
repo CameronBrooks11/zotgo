@@ -18,6 +18,8 @@ func collectionCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "collection",
 		Usage: "inspect and modify collections",
+		Description: "Resolve ancestry with `zot collection path`, or create, rename, move, and delete collections " +
+			"with local writes. To browse the collection tree and keys, use the read-only `zot collections` command.",
 		Commands: []*cli.Command{
 			collectionPathCommand(),
 			collectionCreateCommand(),

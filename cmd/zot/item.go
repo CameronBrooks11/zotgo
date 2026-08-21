@@ -23,6 +23,8 @@ func itemCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "item",
 		Usage: "create and modify items (local endpoint only)",
+		Description: "Create from JSON, patch or replace selected items, delete by key, or print an item template. " +
+			"Write commands support --dry-run and require confirmation unless --yes is set.",
 		Commands: []*cli.Command{
 			itemCreateCommand(),
 			itemPatchCommand(),

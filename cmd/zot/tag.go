@@ -17,6 +17,8 @@ func tagCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "tag",
 		Usage: "add, remove, and delete tags (local endpoint only)",
+		Description: "Add or remove tags on one item, or delete tags from every item in the selected library. " +
+			"Write commands support --dry-run and require confirmation unless --yes is set.",
 		Commands: []*cli.Command{
 			tagAddCommand(),
 			tagRemoveCommand(),
@@ -143,13 +145,17 @@ func itemTagAction(ctx context.Context, cmd *cli.Command, add bool) error {
 	if cmd.Bool("web") {
 		return errors.New("writes are local-only; the --web profile is read-only")
 	}
+	operation := "remove"
+	if add {
+		operation = "add"
+	}
 	itemKey := cmd.String("item")
 	if itemKey == "" {
-		return errors.New("specify the item with --item <key>")
+		return fmt.Errorf("missing item key (usage: zot tag %s --item <item-key> <tag>...)", operation)
 	}
 	names := cmd.Args().Slice()
 	if len(names) == 0 {
-		return errors.New("missing tag name(s)")
+		return fmt.Errorf("missing tag name(s) (usage: zot tag %s --item <item-key> <tag>...)", operation)
 	}
 
 	c, lib, err := resolveLibrary(ctx, cmd)
