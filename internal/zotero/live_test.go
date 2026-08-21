@@ -182,15 +182,30 @@ func TestLiveAnnotationChildren(t *testing.T) {
 	assertLiveAnnotationChildren(t, liveClient(t), UserLibrary())
 }
 
+// A durable annotation fixture makes the live check fail hard instead of
+// silently skipping an unseeded library. Set ZOTGO_LIVE_ANNOTATED_ATTACHMENT to
+// the key of an attachment (PDF or EPUB) carrying at least two annotations that
+// together cover both bodies: a highlight (nonempty text) and a note (nonempty
+// comment), with distinct annotationSortIndex values. Sync it so the web variant
+// sees the same key. Without the env var, the check discovers an annotation or
+// skips, as before.
+const annotationFixtureEnv = "ZOTGO_LIVE_ANNOTATED_ATTACHMENT"
+
 func assertLiveAnnotationChildren(t *testing.T, client *Client, library LibraryRef) {
 	t.Helper()
 	ctx := context.Background()
+
+	if attachmentKey := os.Getenv(annotationFixtureEnv); attachmentKey != "" {
+		assertAnnotationFixture(t, client, library, attachmentKey)
+		return
+	}
+
 	items, err := client.AllItems(ctx, library, ItemsOptions{ItemType: "annotation", Limit: 100})
 	if err != nil {
 		t.Fatalf("list annotations: %v", err)
 	}
 	if len(items) == 0 {
-		t.Skip("no annotations to exercise")
+		t.Skipf("no annotations to exercise; set %s to require a durable fixture", annotationFixtureEnv)
 	}
 	selectedRaw, err := json.Marshal(items[0])
 	if err != nil {
@@ -200,33 +215,74 @@ func assertLiveAnnotationChildren(t *testing.T, client *Client, library LibraryR
 	if err != nil {
 		t.Fatalf("decode sampled annotation: %v", err)
 	}
-	rawChildren, err := client.AllRawAnnotations(ctx, library, selected.AttachmentKey)
-	if err != nil {
-		t.Fatalf("AllRawAnnotations: %v", err)
-	}
-	annotations, err := DecodeAnnotations(rawChildren, selected.AttachmentKey)
-	if err != nil {
-		t.Fatalf("DecodeAnnotations: %v", err)
-	}
+	annotations := fetchDirectAnnotations(t, client, library, selected.AttachmentKey)
+	assertAnnotationOrder(t, annotations)
 	found := false
-	for i, annotation := range annotations {
+	for _, annotation := range annotations {
 		if annotation.Key == selected.Key {
 			found = true
-		}
-		if i > 0 {
-			previous := annotations[i-1]
-			if previous.SortIndex == "" && annotation.SortIndex != "" {
-				t.Fatalf("nonempty sort index follows empty one: %#v", annotations)
-			}
-			if previous.SortIndex != "" && annotation.SortIndex != "" && previous.SortIndex > annotation.SortIndex {
-				t.Fatalf("annotations not in document order: %#v", annotations)
-			}
+			break
 		}
 	}
 	if !found {
 		t.Fatalf("sampled annotation %s absent from parent child endpoint", selected.Key)
 	}
 	t.Logf("attachment %s: checked %d direct annotations", selected.AttachmentKey, len(annotations))
+}
+
+// assertAnnotationFixture fails hard when the configured fixture is missing or
+// incomplete, rather than skipping: it must exist, carry at least two
+// annotations in document order, and cover both a highlight (text) and a note
+// (comment).
+func assertAnnotationFixture(t *testing.T, client *Client, library LibraryRef, attachmentKey string) {
+	t.Helper()
+	annotations := fetchDirectAnnotations(t, client, library, attachmentKey)
+	if len(annotations) < 2 {
+		t.Fatalf("fixture attachment %s has %d annotations, want >= 2 (seed a highlight and a note)", attachmentKey, len(annotations))
+	}
+	assertAnnotationOrder(t, annotations)
+
+	var hasText, hasComment bool
+	for _, a := range annotations {
+		hasText = hasText || a.HasText
+		hasComment = hasComment || a.HasComment
+	}
+	if !hasText {
+		t.Errorf("fixture %s exercises no annotation text; seed a highlight annotation", attachmentKey)
+	}
+	if !hasComment {
+		t.Errorf("fixture %s exercises no annotation comment; seed a note annotation", attachmentKey)
+	}
+	t.Logf("fixture %s: %d annotations, hasText=%v hasComment=%v", attachmentKey, len(annotations), hasText, hasComment)
+}
+
+// fetchDirectAnnotations reads and decodes one attachment's direct annotations.
+func fetchDirectAnnotations(t *testing.T, client *Client, library LibraryRef, attachmentKey string) []Annotation {
+	t.Helper()
+	rawChildren, err := client.AllRawAnnotations(context.Background(), library, attachmentKey)
+	if err != nil {
+		t.Fatalf("AllRawAnnotations(%s): %v", attachmentKey, err)
+	}
+	annotations, err := DecodeAnnotations(rawChildren, attachmentKey)
+	if err != nil {
+		t.Fatalf("DecodeAnnotations(%s): %v", attachmentKey, err)
+	}
+	return annotations
+}
+
+// assertAnnotationOrder checks document order: empty sort indexes last, and
+// nonempty ones ascending.
+func assertAnnotationOrder(t *testing.T, annotations []Annotation) {
+	t.Helper()
+	for i := 1; i < len(annotations); i++ {
+		previous, annotation := annotations[i-1], annotations[i]
+		if previous.SortIndex == "" && annotation.SortIndex != "" {
+			t.Fatalf("nonempty sort index follows empty one: %#v", annotations)
+		}
+		if previous.SortIndex != "" && annotation.SortIndex != "" && previous.SortIndex > annotation.SortIndex {
+			t.Fatalf("annotations not in document order: %#v", annotations)
+		}
+	}
 }
 
 func TestLiveNotFound(t *testing.T) {
