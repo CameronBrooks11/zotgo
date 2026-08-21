@@ -159,6 +159,14 @@ func friendly(err error) error {
 	case errors.Is(err, zotero.ErrInvalidAPIKey):
 		//lint:ignore ST1005 "Zotero" is a proper noun.
 		return errors.New("Zotero rejected the API key — check ZOTGO_API_KEY (run `zot doctor --web`)")
+	case errors.Is(err, zotero.ErrTransport):
+		return errors.New("lost the connection to Zotero mid-request — is it still running? (try `zot doctor`)")
+	}
+	// Rate limiting only ever comes from the Web API; the local API does not 429.
+	var status zotero.StatusError
+	if errors.As(err, &status) && (status.StatusCode == 429 || status.StatusCode == 503) {
+		//lint:ignore ST1005 "Zotero" is a proper noun.
+		return errors.New("Zotero is rate-limiting the request — wait a moment and retry")
 	}
 	return err
 }

@@ -431,6 +431,10 @@ func writeFriendly(err error) error {
 		return errors.New("Zotero requires a write precondition zotgo did not supply (this is a bug)")
 	case errors.Is(err, zotero.ErrPreconditionFailed):
 		return errors.New("the library changed since this write was prepared — re-run")
+	case errors.Is(err, zotero.ErrWriteOutcomeUnknown):
+		// Wrap, don't replace: callers (e.g. attachment import) inspect this
+		// sentinel to classify a write as partial rather than failed.
+		return fmt.Errorf("the write may have succeeded, but Zotero's response was unreadable — check the library before retrying, since a retry could duplicate data (%w)", zotero.ErrWriteOutcomeUnknown)
 	}
 	return friendly(err)
 }
