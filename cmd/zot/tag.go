@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/urfave/cli/v3"
@@ -80,8 +79,9 @@ func tagDeleteAction(ctx context.Context, cmd *cli.Command) error {
 		fmt.Fprintln(w, "\nDry run — nothing was deleted.")
 		return nil
 	}
-	if mode == output.ModeHuman && !cmd.Bool("yes") && !confirm(os.Stdin, w, fmt.Sprintf("Remove %d tag(s) from all items? This cannot be undone.", len(names))) {
-		fmt.Fprintln(w, "Aborted.")
+	if proceed, err := confirmWrite(ctx, cmd, c, mode, w, fmt.Sprintf("Remove %d tag(s) from all items? This cannot be undone.", len(names))); err != nil {
+		return err
+	} else if !proceed {
 		return nil
 	}
 
@@ -225,8 +225,9 @@ func itemTagAction(ctx context.Context, cmd *cli.Command, add bool) error {
 		fmt.Fprintln(w, "\nDry run — nothing was written.")
 		return nil
 	}
-	if mode == output.ModeHuman && !cmd.Bool("yes") && !confirm(os.Stdin, w, fmt.Sprintf("%s %d tag(s) on %s?", capitalize(verb), len(changed), itemKey)) {
-		fmt.Fprintln(w, "Aborted.")
+	if proceed, err := confirmWrite(ctx, cmd, c, mode, w, fmt.Sprintf("%s %d tag(s) on %s?", capitalize(verb), len(changed), itemKey)); err != nil {
+		return err
+	} else if !proceed {
 		return nil
 	}
 
