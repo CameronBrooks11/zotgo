@@ -144,11 +144,14 @@ func newAttachmentImportServer(t *testing.T, opts importServerOptions) (*httptes
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"key": key, "version": "", "links": links, "data": data})
 	})
-	mux.HandleFunc("GET /api/users/0/items", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/users/0/items/{key}/children", func(w http.ResponseWriter, r *http.Request) {
 		setServerID(w)
 		state.duplicateReads++
+		if key := r.PathValue("key"); key != "PARENT01" {
+			t.Errorf("duplicate scan used the wrong parent %q; must use the children route for the target", key)
+		}
 		query := r.URL.Query()
-		if query.Get("itemKey") != "PARENT01" || query.Get("itemType") != "attachment" || query.Get("limit") != "100" {
+		if query.Get("itemType") != "attachment" || query.Get("limit") != "100" {
 			t.Errorf("duplicate query = %s", r.URL.RawQuery)
 		}
 		if !opts.duplicate {
@@ -156,7 +159,7 @@ func newAttachmentImportServer(t *testing.T, opts importServerOptions) (*httptes
 			return
 		}
 		if opts.duplicateSecondPage && query.Get("start") == "" {
-			w.Header().Set("Link", `<`+baseURL+`/api/users/0/items?itemKey=PARENT01&itemType=attachment&limit=100&start=100>; rel="next"`)
+			w.Header().Set("Link", `<`+baseURL+`/api/users/0/items/PARENT01/children?itemType=attachment&limit=100&start=100>; rel="next"`)
 			_, _ = w.Write([]byte(`[]`))
 			return
 		}
@@ -756,6 +759,41 @@ func TestAttachmentImportRejectsInvalidParentTypes(t *testing.T) {
 	}
 }
 
+// #80: the duplicate scan must read only the parent's children (the /children
+// route), never the unscoped /items route where Zotero drops an itemKey scope
+// once itemType is added and returns the whole library. A stray foreign-parent
+// record must be skipped, not turned into a fatal error.
+func TestAttachmentImportDuplicateScanUsesChildrenRouteOnly(t *testing.T) {
+	path := writeAttachmentTestPDF(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/users/0/items/PARENT01", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"key":"PARENT01","data":{"key":"PARENT01","itemType":"journalArticle","title":"Paper"}}`))
+	})
+	mux.HandleFunc("GET /api/users/0/items/PARENT01/children", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("itemType") != "attachment" {
+			t.Errorf("children query = %s", r.URL.RawQuery)
+		}
+		// A stray attachment under a different parent, as a scope leak might yield.
+		// The fix must skip it defensively rather than abort.
+		_, _ = w.Write([]byte(`[{"key":"FOREIGN1","version":"","links":{},"data":{"key":"FOREIGN1","itemType":"attachment","parentItem":"OTHERXXX","linkMode":"imported_file","contentType":"application/pdf","filename":"other.pdf","tags":[],"md5":null,"mtime":null}}]`))
+	})
+	mux.HandleFunc("GET /api/users/0/items", func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("duplicate scan hit the unscoped /items route (%s); it must use /items/PARENT01/children", r.URL.RawQuery)
+		_, _ = w.Write([]byte(`[]`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	out, _, err := runCLI(srv.URL, "--json", "attachment", "import",
+		"--parent", "PARENT01", "--file", path, "--dry-run")
+	if err != nil {
+		t.Fatalf("dry-run import aborted on a foreign attachment (#80 regression): %v", err)
+	}
+	if !strings.Contains(out, `"status": "planned"`) {
+		t.Fatalf("expected planned, got %s", out)
+	}
+}
+
 func TestAttachmentImportGroupDryRunUsesGroupRoutes(t *testing.T) {
 	path := writeAttachmentTestPDF(t)
 	mux := http.NewServeMux()
@@ -765,8 +803,8 @@ func TestAttachmentImportGroupDryRunUsesGroupRoutes(t *testing.T) {
 	mux.HandleFunc("GET /api/groups/42/items/PARENT01", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"key":"PARENT01","data":{"key":"PARENT01","itemType":"journalArticle"}}`))
 	})
-	mux.HandleFunc("GET /api/groups/42/items", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("itemKey") != "PARENT01" || r.URL.Query().Get("itemType") != "attachment" {
+	mux.HandleFunc("GET /api/groups/42/items/PARENT01/children", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("itemType") != "attachment" {
 			t.Errorf("group duplicate query = %s", r.URL.RawQuery)
 		}
 		_, _ = w.Write([]byte(`[]`))
