@@ -20,6 +20,14 @@ Planned and outstanding work is tracked in the
   library, `--dry-run` included). It now reads the parent's children directly
   (the `/items/KEY/children` route, the same transport `zot show` uses) and
   skips any foreign record instead of aborting.
+- `zot doctor`'s **Libraries** section now prints before the closing summary, so
+  "Ready." reads as genuinely last instead of appearing mid-report.
+- A bare key after a grouping noun (`zot attachment KEY`, `note`, `relation`,
+  `annotation`) now suggests the right subcommand — e.g. `did you mean "show"?`
+  — instead of a bare "No help topic for '…'".
+- `zot attachment import --yes` no longer echoes the plan block; on a preflight
+  failure that duplicated the outcome's `Parent`/`MD5` lines. The plan block now
+  prints only for the interactive confirmation it informs.
 
 ### Added
 

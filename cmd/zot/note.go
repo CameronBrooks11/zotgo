@@ -14,8 +14,9 @@ import (
 
 func noteCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "note",
-		Usage: "inspect Zotero notes",
+		Name:   "note",
+		Usage:  "inspect Zotero notes",
+		Action: subcommandRequired("show"),
 		Commands: []*cli.Command{
 			noteShowCommand(),
 		},

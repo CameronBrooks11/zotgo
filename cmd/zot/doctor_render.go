@@ -10,7 +10,7 @@ import (
 // renderHealth writes a human-readable doctor report: what was probed, what the
 // endpoint can do, and — for the states that block zotgo — how to fix it. The
 // status lines and guidance are endpoint-specific; the capability list is not.
-func renderHealth(w io.Writer, h zotero.Health) {
+func renderHealth(w io.Writer, h zotero.Health, libraries []zotero.LibraryFiles) {
 	fmt.Fprintf(w, "zot doctor — checking the %s endpoint at %s\n\n", h.Endpoint.Kind, h.Endpoint.BaseURL)
 
 	web := h.Endpoint.Kind == zotero.EndpointWeb
@@ -21,7 +21,9 @@ func renderHealth(w io.Writer, h zotero.Health) {
 	}
 
 	renderCapabilities(w, h.Capabilities())
+	renderLibraries(w, libraries)
 
+	// Guidance ends the report, so the summary line ("Ready.") is genuinely last.
 	if web {
 		renderWebGuidance(w, h)
 	} else {

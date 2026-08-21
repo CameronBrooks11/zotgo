@@ -10,7 +10,7 @@ import (
 
 func renderToString(h zotero.Health) string {
 	var buf bytes.Buffer
-	renderHealth(&buf, h)
+	renderHealth(&buf, h, nil)
 	return buf.String()
 }
 
@@ -152,6 +152,23 @@ func TestRenderLibraries_MarksAndReason(t *testing.T) {
 		if line != strings.TrimRight(line, " \t") {
 			t.Errorf("line %d has trailing whitespace: %q", i, line)
 		}
+	}
+}
+
+// The Libraries section must come before the closing summary, so "Ready." reads
+// as genuinely last (the report otherwise looks like it ended, then resumed).
+func TestRenderHealth_LibrariesBeforeSummary(t *testing.T) {
+	var buf bytes.Buffer
+	h := zotero.Health{Endpoint: zotero.LocalProfile("http://x"), ZoteroRunning: true, LocalAPIEnabled: true}
+	renderHealth(&buf, h, []zotero.LibraryFiles{{ID: 1, Name: "My Library", FilesEditable: true}})
+	out := buf.String()
+	libIdx := strings.Index(out, "Libraries:")
+	readyIdx := strings.Index(out, "Ready.")
+	if libIdx < 0 || readyIdx < 0 {
+		t.Fatalf("missing Libraries or Ready:\n%s", out)
+	}
+	if libIdx > readyIdx {
+		t.Errorf("Libraries section must precede the Ready summary:\n%s", out)
 	}
 }
 

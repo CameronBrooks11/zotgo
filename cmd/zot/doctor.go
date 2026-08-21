@@ -43,8 +43,7 @@ func doctorCommand() *cli.Command {
 					return err
 				}
 			} else {
-				renderHealth(out(cmd), h)
-				renderLibraries(out(cmd), libraries)
+				renderHealth(out(cmd), h, libraries)
 			}
 
 			// An unreachable Zotero is a non-zero exit in every mode, so scripts

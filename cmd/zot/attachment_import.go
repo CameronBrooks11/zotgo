@@ -97,7 +97,10 @@ func attachmentImportAction(ctx context.Context, cmd *cli.Command) error {
 		return emitAttachmentImport(cmd, mode, libraryDTO, record)
 	}
 
-	if mode == output.ModeHuman {
+	// The plan block informs the interactive confirmation. With --yes there is no
+	// prompt, so it would only pre-echo fields the outcome block already reports —
+	// duplicated noise on a preflight failure (#82). Print it only when prompting.
+	if mode == output.ModeHuman && !cmd.Bool("yes") {
 		fmt.Fprintf(out(cmd), "Target: %s - %s\n", library.Name, client.BaseURL())
 		fmt.Fprintf(out(cmd), "Parent: %s\nFile: %s (%d bytes)\nMD5: %s\n",
 			parentKey, staged.filename, staged.size, staged.md5)
@@ -105,7 +108,7 @@ func attachmentImportAction(ctx context.Context, cmd *cli.Command) error {
 		if duplicate != nil {
 			fmt.Fprintf(out(cmd), "Warning: attachment %s has the same MD5; --allow-duplicate was set.\n", duplicate.Key)
 		}
-		if !cmd.Bool("yes") && !confirm(os.Stdin, out(cmd), fmt.Sprintf("Import %s under %s?", staged.filename, parentKey)) {
+		if !confirm(os.Stdin, out(cmd), fmt.Sprintf("Import %s under %s?", staged.filename, parentKey)) {
 			fmt.Fprintln(out(cmd), "Aborted.")
 			return nil
 		}
