@@ -37,10 +37,11 @@ The client (`internal/zotero`) and rendering (`internal/render`) use only the
 standard library; third-party Go modules are confined to the CLI layer
 (`urfave/cli/v3`) and justified one at a time.
 
-- `just setup` — download + verify modules
+- `just setup` — download + verify modules, install the git pre-commit hook
 - `just fmt` — format (`gofmt -w`)
 - `just lint` — `go vet ./...` and `go vet -tags live ./...`
-- `just check` — CI-equivalent gate: `gofmt` check + vet + staticcheck + compile
+- `just check` — CI-equivalent gate: `gofmt` check + vet + staticcheck + misspell
+  + compile
 - `just test` — `go test ./...`
 - `just test-race` — the suite under the race detector
 - `just test-live` — exercise a real, running Zotero (skips when it is absent)
@@ -51,6 +52,8 @@ standard library; third-party Go modules are confined to the CLI layer
 - `just release-snapshot` — cross-platform dry-run build via goreleaser
 
 Always run `just check` and `just test` before committing. Both must be green.
+`just setup` installs a pre-commit hook that runs this gate, so a normal
+`git commit` enforces it; never bypass it with `--no-verify`.
 
 ### The live suite
 
