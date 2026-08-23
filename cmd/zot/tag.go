@@ -16,31 +16,32 @@ import (
 func tagCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "tag",
-		Usage: "add, remove, and delete tags (local endpoint only)",
-		Description: "Add or remove tags on one item, or delete tags from every item in the selected library. " +
+		Usage: "add, remove, and purge tags (local endpoint only)",
+		Description: "Add or remove tags on one item, or purge tags from every item in the selected library. " +
 			"Write commands support --dry-run and require confirmation unless --yes is set.",
 		Commands: []*cli.Command{
 			tagAddCommand(),
 			tagRemoveCommand(),
-			tagDeleteCommand(),
+			tagPurgeCommand(),
 		},
 	}
 }
 
-func tagDeleteCommand() *cli.Command {
+func tagPurgeCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "delete",
+		Name:      "purge",
+		Aliases:   []string{"delete"},
 		Usage:     "remove tag(s) from EVERY item in the library",
 		ArgsUsage: "<tag>...",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{Name: "dry-run", Usage: "show what would be removed without deleting"},
 			&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "skip the confirmation prompt"},
 		},
-		Action: tagDeleteAction,
+		Action: tagPurgeAction,
 	}
 }
 
-func tagDeleteAction(ctx context.Context, cmd *cli.Command) error {
+func tagPurgeAction(ctx context.Context, cmd *cli.Command) error {
 	mode, err := machineWriteMode(cmd, "tag")
 	if err != nil {
 		return err
@@ -50,10 +51,10 @@ func tagDeleteAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	names := cmd.Args().Slice()
 	if len(names) == 0 {
-		return errors.New("missing tag name(s) (usage: zot tag delete <tag>...)")
+		return errors.New("missing tag name(s) (usage: zot tag purge <tag>...)")
 	}
 	if len(names) > zotero.MaxDeleteObjects {
-		return fmt.Errorf("%d tags exceeds the %d-tag delete limit", len(names), zotero.MaxDeleteObjects)
+		return fmt.Errorf("%d tags exceeds the %d-tag purge limit", len(names), zotero.MaxDeleteObjects)
 	}
 
 	c, lib, err := resolveLibrary(ctx, cmd)
@@ -111,9 +112,9 @@ func tagAddCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "add",
 		Usage:     "add tag(s) to one item",
-		ArgsUsage: "<tag>...",
+		ArgsUsage: "<item-key> <tag>...",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "item", Aliases: []string{"i"}, Usage: "item key to tag (required)"},
+			&cli.StringFlag{Name: "item", Aliases: []string{"i"}, Usage: "item key to tag (deprecated alias for the first argument)"},
 			&cli.BoolFlag{Name: "dry-run", Usage: "show what would change without writing"},
 			&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "skip the confirmation prompt"},
 		},
@@ -125,9 +126,9 @@ func tagRemoveCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "remove",
 		Usage:     "remove tag(s) from one item",
-		ArgsUsage: "<tag>...",
+		ArgsUsage: "<item-key> <tag>...",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "item", Aliases: []string{"i"}, Usage: "item key to untag (required)"},
+			&cli.StringFlag{Name: "item", Aliases: []string{"i"}, Usage: "item key to untag (deprecated alias for the first argument)"},
 			&cli.BoolFlag{Name: "dry-run", Usage: "show what would change without writing"},
 			&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "skip the confirmation prompt"},
 		},
@@ -149,13 +150,20 @@ func itemTagAction(ctx context.Context, cmd *cli.Command, add bool) error {
 	if add {
 		operation = "add"
 	}
+	// The item key is the first positional argument; --item is the deprecated
+	// alias and still wins when set, so the old `--item KEY tag...` form is
+	// unchanged and the new `KEY tag...` form needs no flag.
 	itemKey := cmd.String("item")
-	if itemKey == "" {
-		return fmt.Errorf("missing item key (usage: zot tag %s --item <item-key> <tag>...)", operation)
-	}
 	names := cmd.Args().Slice()
+	if itemKey == "" {
+		if len(names) == 0 {
+			return fmt.Errorf("missing item key (usage: zot tag %s <item-key> <tag>...)", operation)
+		}
+		itemKey = names[0]
+		names = names[1:]
+	}
 	if len(names) == 0 {
-		return fmt.Errorf("missing tag name(s) (usage: zot tag %s --item <item-key> <tag>...)", operation)
+		return fmt.Errorf("missing tag name(s) (usage: zot tag %s <item-key> <tag>...)", operation)
 	}
 
 	c, lib, err := resolveLibrary(ctx, cmd)

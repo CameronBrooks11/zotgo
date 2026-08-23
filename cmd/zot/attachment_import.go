@@ -25,7 +25,7 @@ func attachmentImportCommand() *cli.Command {
 			"Managed imports are local-only, capped at 128 MiB, and require 'Always Allow' authorization.",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "parent", Usage: "existing bibliographic parent item key"},
-			&cli.StringFlag{Name: "file", Usage: "local regular-file path"},
+			&cli.StringFlag{Name: "path", Aliases: []string{"file"}, Usage: "local regular-file path"},
 			&cli.StringFlag{Name: "title", Value: "Attachment", Usage: "attachment title"},
 			&cli.StringFlag{Name: "source-url", Usage: "source/provenance URL stored on the attachment (not downloaded)"},
 			&cli.StringFlag{Name: "filename", Usage: "managed filename (default: local basename)"},
@@ -50,9 +50,9 @@ func attachmentImportAction(ctx context.Context, cmd *cli.Command) error {
 	if parentKey == "" {
 		return errors.New("missing --parent item key; see `zot attachment import --help`")
 	}
-	sourcePath := cmd.String("file")
+	sourcePath := cmd.String("path")
 	if sourcePath == "" {
-		return errors.New("missing --file path; see `zot attachment import --help`")
+		return errors.New("missing --path; see `zot attachment import --help`")
 	}
 	title := strings.TrimSpace(cmd.String("title"))
 	if title == "" {

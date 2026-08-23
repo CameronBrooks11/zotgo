@@ -170,6 +170,35 @@ func TestTagAddMachine(t *testing.T) {
 	}
 }
 
+// A6: the item key may be given positionally (`tag add KEY tag...`); --item is
+// the deprecated alias. The positional form must produce the same result as the
+// flag form does in TestTagAddMachine.
+func TestTagAddPositionalKey(t *testing.T) {
+	seedWriteLease(t)
+	storeItemWriteKey(t)
+	fake := &tagWriteFake{}
+	srv := newTagWriteFake(t, fake)
+	defer srv.Close()
+
+	got, _, err := runCLI(srv.URL, "--json", "tag", "add", "ITEM0001", "keep", "new", "--yes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	recs := decodeTagMutationDocument(t, got)
+	if len(recs) != 2 {
+		t.Fatalf("records = %+v", recs)
+	}
+	if recs[0].Tag != "keep" || recs[0].Status != "unchanged" || recs[0].Item != "ITEM0001" {
+		t.Errorf("record 0 = %+v", recs[0])
+	}
+	if recs[1].Tag != "new" || recs[1].Status != "added" || recs[1].Item != "ITEM0001" {
+		t.Errorf("record 1 = %+v", recs[1])
+	}
+	if fake.patches.Load() != 1 {
+		t.Fatalf("patches = %d", fake.patches.Load())
+	}
+}
+
 func TestTagRemoveMachineUnchangedWhenAbsent(t *testing.T) {
 	seedWriteLease(t)
 	storeItemWriteKey(t)

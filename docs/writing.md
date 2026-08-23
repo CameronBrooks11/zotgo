@@ -57,10 +57,12 @@ Zotero response.
 ```bash
 zot attachment import \
   --parent ITEMKEY \
-  --file figure.png \
+  --path figure.png \
   --title "Figure 1" \
   --source-url https://example.org/figure.png
 ```
+
+The binary flag is `--path` (`--file` is a deprecated alias).
 
 `attachment import` attaches one non-empty regular file to an existing
 bibliographic parent. It copies a stable snapshot into private staging, creates
@@ -107,13 +109,15 @@ statuses `planned`, `created`, `renamed`, `moved`, `deleted`, `notFound`, and
 ## Tags
 
 ```bash
-zot tag add urgent todo --item ITEMKEY   # add tags to one item
-zot tag remove todo --item ITEMKEY       # remove tags from one item
-zot tag delete urgent                    # remove a tag from EVERY item (library-wide)
+zot tag add ITEMKEY urgent todo   # add tags to one item
+zot tag remove ITEMKEY todo        # remove tags from one item
+zot tag purge urgent               # remove a tag from EVERY item (library-wide)
 ```
 
-`tag add`/`remove` edit one item's tags and preserve the rest; `tag delete`
-strips a tag from the whole library.
+`tag add`/`remove` edit one item's tags and preserve the rest; `tag purge`
+strips a tag from the whole library. The item key is the first argument (`--item`
+is a deprecated alias); `tag purge` was formerly `tag delete`, still accepted as
+a deprecated alias.
 
 Tag writes emit `tag-mutations` (`--json`) or `tag-mutation` lines (`--jsonl`),
 one record per requested tag. `add`/`remove` carry the target `item` and report

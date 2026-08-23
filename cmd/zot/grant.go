@@ -27,7 +27,7 @@ func grantCommand() *cli.Command {
 			"yourself never need a lease. See docs/design/write-authority.md.",
 		Flags: []cli.Flag{
 			&cli.DurationFlag{Name: "ttl", Value: DefaultLeaseTTL, Usage: "how long the lease is valid (max 24h)"},
-			&cli.StringSliceFlag{Name: "operations", Aliases: []string{"o"}, Usage: "operations to allow (default: all non-destructive writes)"},
+			&cli.StringSliceFlag{Name: "operations", Usage: "operations to allow (default: all non-destructive writes)"},
 			&cli.StringFlag{Name: "note", Usage: "a note recorded in the lease and its audit log"},
 		},
 		Action: grantAction,
