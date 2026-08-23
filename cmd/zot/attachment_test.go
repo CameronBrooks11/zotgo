@@ -110,7 +110,7 @@ func TestAttachmentShowMachineOutput(t *testing.T) {
 		if err := json.Unmarshal([]byte(out), &doc); err != nil {
 			t.Fatalf("decode %s: %v\n%s", mode, err, out)
 		}
-		if doc.Schema != 2 || doc.Kind != "attachment" || doc.Data["key"] != "ATTACH01" || doc.Data["parentKey"] != "PARENT01" {
+		if doc.Schema != 3 || doc.Kind != "attachment" || doc.Data["key"] != "ATTACH01" || doc.Data["parentKey"] != "PARENT01" {
 			t.Fatalf("%s document = %#v", mode, doc)
 		}
 		if len(doc.Data) != 15 {

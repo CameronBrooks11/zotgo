@@ -66,27 +66,27 @@ type Item struct {
 // Index always refers to the caller's request order. Fields names the fields
 // changed by a patch, without exposing the patch values themselves.
 type ItemMutation struct {
-	Index     int            `json:"index"`
-	Operation string         `json:"operation"`
-	Status    string         `json:"status"`
-	Key       string         `json:"key,omitempty"`
-	Type      string         `json:"type,omitempty"`
-	Title     string         `json:"title,omitempty"`
-	Fields    []string       `json:"fields,omitempty"`
-	Failure   *MutationError `json:"failure,omitempty"`
+	Index     int       `json:"index"`
+	Operation Operation `json:"operation"`
+	Status    Status    `json:"status"`
+	Key       string    `json:"key,omitempty"`
+	Type      string    `json:"type,omitempty"`
+	Title     string    `json:"title,omitempty"`
+	Fields    []string  `json:"fields,omitempty"`
+	Failure   *Failure  `json:"failure,omitempty"`
 }
 
 // CollectionMutation is the outcome, or dry-run plan, for one collection write
 // (create, rename, or delete). Index always refers to the caller's request
 // order; for the single-collection create/rename it is 0.
 type CollectionMutation struct {
-	Index     int            `json:"index"`
-	Operation string         `json:"operation"`
-	Status    string         `json:"status"`
-	Key       string         `json:"key,omitempty"`
-	Name      string         `json:"name,omitempty"`
-	ParentKey string         `json:"parentKey,omitempty"`
-	Failure   *MutationError `json:"failure,omitempty"`
+	Index     int       `json:"index"`
+	Operation Operation `json:"operation"`
+	Status    Status    `json:"status"`
+	Key       string    `json:"key,omitempty"`
+	Name      string    `json:"name,omitempty"`
+	ParentKey string    `json:"parentKey,omitempty"`
+	Failure   *Failure  `json:"failure,omitempty"`
 }
 
 // TagMutation is the outcome, or dry-run plan, for one tag write. Index refers
@@ -94,18 +94,12 @@ type CollectionMutation struct {
 // tag was added to or removed from; it is empty for the library-wide delete,
 // which strips the tag from every item at once.
 type TagMutation struct {
-	Index     int            `json:"index"`
-	Operation string         `json:"operation"`
-	Status    string         `json:"status"`
-	Tag       string         `json:"tag"`
-	Item      string         `json:"item,omitempty"`
-	Failure   *MutationError `json:"failure,omitempty"`
-}
-
-// MutationError is a structured rejection returned for a failed write.
-type MutationError struct {
-	Code    int    `json:"code,omitempty"`
-	Message string `json:"message"`
+	Index     int       `json:"index"`
+	Operation Operation `json:"operation"`
+	Status    Status    `json:"status"`
+	Tag       string    `json:"tag"`
+	Item      string    `json:"item,omitempty"`
+	Failure   *Failure  `json:"failure,omitempty"`
 }
 
 // Creator is one author, editor, or other contributor.

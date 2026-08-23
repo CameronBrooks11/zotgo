@@ -139,7 +139,7 @@ func TestCollectionCreateMachineFailureExitsAfterEmitting(t *testing.T) {
 		t.Fatalf("err = %v, want exit 1", err)
 	}
 	doc := decodeCollectionMutationDocument(t, got)
-	if len(doc.Data) != 1 || doc.Data[0].Status != "failed" || doc.Data[0].Failure == nil || doc.Data[0].Failure.Code != 400 {
+	if len(doc.Data) != 1 || doc.Data[0].Status != "failed" || doc.Data[0].Failure == nil || doc.Data[0].Failure.Code != output.CodeInvalid || doc.Data[0].Failure.HTTPStatus != 400 {
 		t.Fatalf("record = %+v", doc.Data)
 	}
 	if strings.Contains(got, "Target:") || strings.Contains(got, `"version"`) {
@@ -265,7 +265,7 @@ func TestCollectionDeleteMachineNotFoundOrdering(t *testing.T) {
 		t.Fatal(err)
 	}
 	doc := decodeCollectionMutationDocument(t, got)
-	wantStatuses := []string{"notFound", "planned", "notFound", "planned"}
+	wantStatuses := []output.Status{output.StatusNotFound, output.StatusPlanned, output.StatusNotFound, output.StatusPlanned}
 	if len(doc.Data) != len(wantStatuses) {
 		t.Fatalf("data = %+v", doc.Data)
 	}
@@ -287,7 +287,7 @@ func TestCollectionDeleteMachineNotFoundOrdering(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("delete JSONL lines = %d: %s", len(lines), got)
 	}
-	for i, wantStatus := range []string{"deleted", "notFound"} {
+	for i, wantStatus := range []output.Status{output.StatusDeleted, output.StatusNotFound} {
 		var line struct {
 			Kind output.Kind               `json:"kind"`
 			Data output.CollectionMutation `json:"data"`

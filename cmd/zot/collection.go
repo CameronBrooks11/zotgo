@@ -132,8 +132,8 @@ func collectionCreateContext(index int, raw json.RawMessage) output.CollectionMu
 	_ = json.Unmarshal(raw, &context)
 	record := output.CollectionMutation{
 		Index:     index,
-		Operation: "create",
-		Status:    "planned",
+		Operation: output.OpCreate,
+		Status:    output.StatusPlanned,
 		Name:      context.Name,
 	}
 	if key, ok := context.ParentCollection.(string); ok {
@@ -167,7 +167,7 @@ func collectionCreateResults(cols []json.RawMessage, res zotero.WriteResult) ([]
 		if created, ok := res.Successful[indexText]; ok {
 			outcomes++
 			col := output.NewCollection(created)
-			record.Status = "created"
+			record.Status = output.StatusCreated
 			record.Key = col.Key
 			if col.Name != "" {
 				record.Name = col.Name
@@ -178,23 +178,23 @@ func collectionCreateResults(cols []json.RawMessage, res zotero.WriteResult) ([]
 		}
 		if key, ok := res.Unchanged[indexText]; ok {
 			outcomes++
-			record.Status = "unchanged"
+			record.Status = output.StatusUnchanged
 			record.Key = key
 		}
 		if failure, ok := res.Failed[indexText]; ok {
 			outcomes++
-			record.Status = "failed"
+			record.Status = output.StatusFailed
 			record.Key = failure.Key
-			record.Failure = &output.MutationError{Code: failure.Code, Message: failure.Message}
+			record.Failure = newFailure(failure)
 		}
 		if outcomes != 1 {
 			message := "Zotero returned no outcome for this request"
 			if outcomes > 1 {
 				message = "Zotero returned multiple outcomes for this request"
 			}
-			record.Status = "failed"
+			record.Status = output.StatusFailed
 			record.Key = ""
-			record.Failure = &output.MutationError{Message: message}
+			record.Failure = &output.Failure{Code: output.CodeUnknown, Message: message}
 			problems = append(problems, fmt.Sprintf("request index %d has %d outcomes", index, outcomes))
 		}
 		records = append(records, record)
@@ -246,7 +246,7 @@ func collectionRenameAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	data, _ := col.CollectionData()
 
-	record := output.CollectionMutation{Index: 0, Operation: "rename", Status: "planned", Key: key, Name: name}
+	record := output.CollectionMutation{Index: 0, Operation: output.OpRename, Status: output.StatusPlanned, Key: key, Name: name}
 	w := out(cmd)
 	if mode == output.ModeHuman {
 		fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
@@ -277,7 +277,7 @@ func collectionRenameAction(ctx context.Context, cmd *cli.Command) error {
 		return writeFriendly(err)
 	}
 	if mode != output.ModeHuman {
-		record.Status = "renamed"
+		record.Status = output.StatusRenamed
 		return emitCollectionMutations(w, mode, output.NewLibrary(lib), []output.CollectionMutation{record})
 	}
 	fmt.Fprintf(w, "renamed %s\n", key)
@@ -341,7 +341,7 @@ func collectionMoveAction(ctx context.Context, cmd *cli.Command) error {
 		dest = to
 	}
 
-	record := output.CollectionMutation{Index: 0, Operation: "move", Status: "planned", Key: key, Name: data.Name, ParentKey: to}
+	record := output.CollectionMutation{Index: 0, Operation: output.OpMove, Status: output.StatusPlanned, Key: key, Name: data.Name, ParentKey: to}
 	w := out(cmd)
 	if mode == output.ModeHuman {
 		fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
@@ -372,7 +372,7 @@ func collectionMoveAction(ctx context.Context, cmd *cli.Command) error {
 		return writeFriendly(err)
 	}
 	if mode != output.ModeHuman {
-		record.Status = "moved"
+		record.Status = output.StatusMoved
 		return emitCollectionMutations(w, mode, output.NewLibrary(lib), []output.CollectionMutation{record})
 	}
 	fmt.Fprintf(w, "moved %s\n", key)
@@ -423,7 +423,7 @@ func collectionDeleteAction(ctx context.Context, cmd *cli.Command) error {
 	for index, key := range keys {
 		col, err := c.Collection(ctx, lib, key)
 		if errors.Is(err, zotero.ErrNotFound) {
-			records = append(records, output.CollectionMutation{Index: index, Operation: "delete", Status: "notFound", Key: key})
+			records = append(records, output.CollectionMutation{Index: index, Operation: output.OpDelete, Status: output.StatusNotFound, Key: key})
 			if mode == output.ModeHuman {
 				fmt.Fprintf(w, "  ! %s — not found, skipping\n", key)
 			}
@@ -434,7 +434,7 @@ func collectionDeleteAction(ctx context.Context, cmd *cli.Command) error {
 		}
 		data, _ := col.CollectionData()
 		found = append(found, key)
-		records = append(records, output.CollectionMutation{Index: index, Operation: "delete", Status: "planned", Key: key, Name: data.Name})
+		records = append(records, output.CollectionMutation{Index: index, Operation: output.OpDelete, Status: output.StatusPlanned, Key: key, Name: data.Name})
 		if mode == output.ModeHuman {
 			fmt.Fprintf(w, "  - %s: %s\n", key, orDash(data.Name))
 		}
@@ -472,8 +472,8 @@ func collectionDeleteAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	if mode != output.ModeHuman {
 		for i := range records {
-			if records[i].Status == "planned" {
-				records[i].Status = "deleted"
+			if records[i].Status == output.StatusPlanned {
+				records[i].Status = output.StatusDeleted
 			}
 		}
 		return emitCollectionMutations(w, mode, output.NewLibrary(lib), records)

@@ -91,7 +91,7 @@ func TestRelationListAllOutputModes(t *testing.T) {
 	if err := json.Unmarshal([]byte(jsonOutput), &document); err != nil {
 		t.Fatalf("decode JSON: %v\n%s", err, jsonOutput)
 	}
-	if document.Schema != 2 || document.Kind != "relations" || document.Meta.Shown != 3 || document.Meta.Total != 3 {
+	if document.Schema != 3 || document.Kind != "relations" || document.Meta.Shown != 3 || document.Meta.Total != 3 {
 		t.Fatalf("document = %#v", document)
 	}
 	if len(document.Data) != 3 || document.Data[0].ItemKey != "SOURCE01" || document.Data[0].TargetKey != "TARGET01" || document.Data[2].TargetKey != "" {
@@ -119,7 +119,7 @@ func TestRelationListAllOutputModes(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
 			t.Fatalf("line %d: %v", i, err)
 		}
-		if record.Schema != 2 || record.Kind != "relation" {
+		if record.Schema != 3 || record.Kind != "relation" {
 			t.Fatalf("line %d = %#v", i, record)
 		}
 	}

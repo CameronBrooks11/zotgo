@@ -82,12 +82,12 @@ func attachmentImportAction(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	record := output.AttachmentImport{
-		Status: "planned", Stage: "preflight", ParentKey: parentKey,
+		Status: output.StatusPlanned, Stage: "preflight", ParentKey: parentKey,
 		Filename: staged.filename, ContentType: staged.contentType,
 		Size: staged.size, MD5: staged.md5,
 	}
 	if duplicate != nil && !cmd.Bool("allow-duplicate") {
-		record.Status = "duplicate"
+		record.Status = output.StatusDuplicate
 		record.AttachmentKey = &duplicate.Key
 		record.Filename = duplicate.Filename
 		record.FileStatus = attachmentImportFileStatus(*duplicate)
@@ -120,27 +120,27 @@ func attachmentImportAction(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	if err := ensureImportWriteAuthority(ctx, cmd, client, mode); err != nil {
-		record.Status = "failed"
+		record.Status = output.StatusFailed
 		// The authority errors (missing/expired/out-of-scope lease, no write API)
 		// are curated, actionable messages — surface them rather than a generic line.
 		return finishAttachmentImportFailure(cmd, mode, libraryDTO, record,
-			"authorization-required", err.Error())
+			output.CodeAuthorizationRequired, err.Error(), importHTTPStatus(err))
 	}
 
 	attachmentKey, err := createImportedAttachmentMetadata(ctx, client, library, parentKey, title, sourceURL, staged.contentType)
 	if err != nil {
 		if errors.Is(err, zotero.ErrWriteOutcomeUnknown) {
-			record.Status = "partial"
+			record.Status = output.StatusPartial
 			record.Stage = "metadata-create-unknown"
 			return finishAttachmentImportFailure(cmd, mode, libraryDTO, record,
-				"metadata-create-unknown", "Zotero may have created attachment metadata, but its key could not be determined")
+				output.CodeMetadataCreateUnknown, "Zotero may have created attachment metadata, but its key could not be determined", importHTTPStatus(err))
 		}
-		record.Status = "failed"
+		record.Status = output.StatusFailed
 		return finishAttachmentImportFailure(cmd, mode, libraryDTO, record,
-			"metadata-create-failed", safeImportFailure("Zotero did not create the attachment metadata", err))
+			output.CodeMetadataCreateFailed, safeImportFailure("Zotero did not create the attachment metadata", err), importHTTPStatus(err))
 	}
 	record.AttachmentKey = &attachmentKey
-	record.Status = "partial"
+	record.Status = output.StatusPartial
 	record.Stage = "metadata-created"
 
 	metadata := zotero.AttachmentUploadMetadata{
@@ -150,18 +150,18 @@ func attachmentImportAction(ctx context.Context, cmd *cli.Command) error {
 	authorization, err := client.AuthorizeAttachmentUpload(ctx, library, attachmentKey, metadata)
 	if err != nil {
 		return finishAttachmentImportFailure(cmd, mode, libraryDTO, record,
-			"upload-authorize-failed", safeImportFailure("Zotero did not authorize the file upload", err))
+			output.CodeUploadAuthorizeFailed, safeImportFailure("Zotero did not authorize the file upload", err), importHTTPStatus(err))
 	}
 	record.Stage = "authorized"
 
 	if !authorization.Exists {
 		if _, err := staged.file.Seek(0, io.SeekStart); err != nil {
 			return finishAttachmentImportFailure(cmd, mode, libraryDTO, record,
-				"staged-file-failed", "could not rewind the staged attachment")
+				output.CodeStagedFileFailed, "could not rewind the staged attachment", 0)
 		}
 		if err := client.UploadAuthorizedAttachment(ctx, authorization, staged.file, staged.size); err != nil {
 			return finishAttachmentImportFailure(cmd, mode, libraryDTO, record,
-				"upload-failed", safeImportFailure("Zotero did not accept the file bytes", err))
+				output.CodeUploadFailed, safeImportFailure("Zotero did not accept the file bytes", err), importHTTPStatus(err))
 		}
 		record.Stage = "uploaded"
 		registerErr := client.RegisterAttachmentUpload(ctx, library, attachmentKey, authorization.UploadKey)
@@ -172,7 +172,7 @@ func attachmentImportAction(ctx context.Context, cmd *cli.Command) error {
 			ctx, client, library, attachmentKey, parentKey, title, sourceURL, *staged)
 		setAttachmentImportVerification(&record, attachment, verification)
 		if verification.OK() {
-			record.Status = "imported"
+			record.Status = output.StatusImported
 			record.Stage = "verified"
 			record.Filename = attachment.Filename
 			if registerErr != nil {
@@ -182,10 +182,10 @@ func attachmentImportAction(ctx context.Context, cmd *cli.Command) error {
 		}
 		if registerErr != nil {
 			return finishAttachmentImportFailure(cmd, mode, libraryDTO, record,
-				"register-failed", safeImportFailure("Zotero did not confirm file registration", registerErr))
+				output.CodeRegisterFailed, safeImportFailure("Zotero did not confirm file registration", registerErr), importHTTPStatus(registerErr))
 		}
 		return finishAttachmentImportFailure(cmd, mode, libraryDTO, record,
-			"verification-failed", safeImportFailure("the registered attachment failed focused verification", verifyErr))
+			output.CodeVerificationFailed, safeImportFailure("the registered attachment failed focused verification", verifyErr), importHTTPStatus(verifyErr))
 	}
 
 	attachment, verification, verifyErr := verifyImportedAttachment(
@@ -193,9 +193,9 @@ func attachmentImportAction(ctx context.Context, cmd *cli.Command) error {
 	setAttachmentImportVerification(&record, attachment, verification)
 	if !verification.OK() {
 		return finishAttachmentImportFailure(cmd, mode, libraryDTO, record,
-			"verification-failed", safeImportFailure("Zotero reported existing bytes but verification failed", verifyErr))
+			output.CodeVerificationFailed, safeImportFailure("Zotero reported existing bytes but verification failed", verifyErr), importHTTPStatus(verifyErr))
 	}
-	record.Status = "imported"
+	record.Status = output.StatusImported
 	record.Stage = "verified"
 	record.Filename = attachment.Filename
 	return emitAttachmentImport(cmd, mode, libraryDTO, record)
@@ -429,8 +429,19 @@ func safeImportFailure(prefix string, err error) string {
 	}
 }
 
-func finishAttachmentImportFailure(cmd *cli.Command, mode output.Mode, library *output.Library, record output.AttachmentImport, code, message string) error {
-	record.Failure = &output.AttachmentImportFailure{Code: code, Message: message}
+// importHTTPStatus returns the HTTP status err carries, or 0 when err is not a
+// Zotero HTTP status error. It lets an import failure record Zotero's exact
+// status in Failure.HTTPStatus alongside its phase FailureCode.
+func importHTTPStatus(err error) int {
+	var statusErr zotero.StatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.StatusCode
+	}
+	return 0
+}
+
+func finishAttachmentImportFailure(cmd *cli.Command, mode output.Mode, library *output.Library, record output.AttachmentImport, code output.FailureCode, message string, httpStatus int) error {
+	record.Failure = &output.Failure{Code: code, HTTPStatus: httpStatus, Message: message}
 	if err := emitAttachmentImport(cmd, mode, library, record); err != nil {
 		return err
 	}

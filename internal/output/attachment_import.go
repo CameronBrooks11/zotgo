@@ -2,7 +2,7 @@ package output
 
 // AttachmentImport is the stable outcome of one managed-file import.
 type AttachmentImport struct {
-	Status        string                        `json:"status"`
+	Status        Status                        `json:"status"`
 	Stage         string                        `json:"stage"`
 	ParentKey     string                        `json:"parentKey"`
 	AttachmentKey *string                       `json:"attachmentKey"`
@@ -12,7 +12,7 @@ type AttachmentImport struct {
 	MD5           string                        `json:"md5"`
 	FileStatus    *AttachmentImportFileStatus   `json:"fileStatus"`
 	Verification  *AttachmentImportVerification `json:"verification"`
-	Failure       *AttachmentImportFailure      `json:"failure"`
+	Failure       *Failure                      `json:"failure"`
 }
 
 // AttachmentImportFileStatus conservatively summarizes advertised file metadata.
@@ -38,10 +38,4 @@ type AttachmentImportVerification struct {
 func (v AttachmentImportVerification) OK() bool {
 	return v.Parent && v.ManagedStorage && v.Title && v.SourceURL &&
 		v.Filename && v.ContentType && v.Size && v.Checksum
-}
-
-// AttachmentImportFailure is a bounded structured failure for partial imports.
-type AttachmentImportFailure struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
 }
