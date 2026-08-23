@@ -582,6 +582,22 @@ func TestAttachmentImportHumanDryRunExplainsUpload(t *testing.T) {
 	}
 }
 
+// A4: --path is the canonical binary-file flag (--file is the deprecated alias).
+func TestAttachmentImportAcceptsPathFlag(t *testing.T) {
+	path := writeAttachmentTestPDF(t)
+	t.Setenv("ZOTGO_CONFIG_DIR", t.TempDir())
+	srv, _ := newAttachmentImportServer(t, importServerOptions{})
+	defer srv.Close()
+	out, _, err := runCLI(srv.URL,
+		"attachment", "import", "--parent", "PARENT01", "--path", path, "--dry-run")
+	if err != nil {
+		t.Fatalf("--path dry run: %v", err)
+	}
+	if !strings.Contains(out, "Status: planned") {
+		t.Fatalf("--path did not stage the file:\n%s", out)
+	}
+}
+
 func TestAttachmentImportUnknownCreateOutcomeIsPartialWithoutRetry(t *testing.T) {
 	path := writeAttachmentTestPDF(t)
 	saveImportTestKey(t)

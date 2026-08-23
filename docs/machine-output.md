@@ -130,7 +130,7 @@ block the raw escape hatch.
 
 ### Attachment import
 
-`zot --json attachment import --parent KEY --file PATH --yes` emits one
+`zot --json attachment import --parent KEY --path PATH --yes` emits one
 `attachment-import` record. It reports `planned`, `duplicate`, `imported`,
 `partial`, or `failed`, the last completed stage, the nullable created key, the
 staged filename/type/size/MD5, focused verification, and a bounded failure when

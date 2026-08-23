@@ -160,7 +160,8 @@ func TestMissingInputsIdentifyExactLeaf(t *testing.T) {
 		{args: []string{"collection", "delete"}, want: "zot collection delete"},
 		{args: []string{"tag", "add"}, want: "zot tag add"},
 		{args: []string{"tag", "remove"}, want: "zot tag remove"},
-		{args: []string{"tag", "delete"}, want: "zot tag delete"},
+		{args: []string{"tag", "purge"}, want: "zot tag purge"},
+		{args: []string{"tag", "delete"}, want: "zot tag purge"}, // deprecated alias routes to purge
 	}
 	for _, test := range tests {
 		name := strings.Join(test.args, "/")

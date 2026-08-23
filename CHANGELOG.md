@@ -10,6 +10,28 @@ Planned and outstanding work is tracked in the
 
 ## [Unreleased]
 
+CLI-surface refinements toward 1.0, each keeping the old form as a deprecated
+alias so nothing breaks — the clean form is just the default now.
+
+### Added
+
+- Read aliases under the write nouns: `zot item list`, `item show`, and
+  `item search` mirror the top-level `list`/`show`/`search`, and
+  `zot collection list` mirrors `collections`. The top-level commands stay
+  primary; the aliases share their flags and output verbatim.
+
+### Changed
+
+- `zot tag add` / `tag remove` now take the item key as the first argument
+  (`zot tag add KEY urgent todo`); `--item` remains as a deprecated alias.
+- The library-wide `zot tag delete` is now `zot tag purge`; `tag delete` remains
+  as a deprecated alias. Machine output is unchanged — the `operation` field and
+  the `tag.delete` lease operation keep their names.
+- `zot attachment import`'s binary-file flag is now `--path`; `--file` remains as
+  a deprecated alias. (The `--file` on `item create`/`patch`/`replace`, which
+  reads JSON, is unaffected.)
+- `zot grant --operations` no longer has an `-o` shorthand; use the long flag.
+
 ## [0.10.0] - 2026-08-21
 
 ### Fixed

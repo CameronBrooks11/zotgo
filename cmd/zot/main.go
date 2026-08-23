@@ -157,6 +157,17 @@ func subcommandRequired(suggest string) cli.ActionFunc {
 	}
 }
 
+// readAlias repurposes a top-level read command as a nested alias under a noun
+// command (A1: `item list/show/search`, `collection list`). The top-level form
+// stays primary; the alias shares its flags and action verbatim, only renaming
+// it and dropping the top-level alias and category that do not apply when nested.
+func readAlias(cmd *cli.Command, name string) *cli.Command {
+	cmd.Name = name
+	cmd.Aliases = nil
+	cmd.Category = ""
+	return cmd
+}
+
 // out returns the writer commands should print results to (os.Stdout by
 // default; overridable in tests via the root command's Writer).
 func out(cmd *cli.Command) io.Writer {

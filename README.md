@@ -29,7 +29,7 @@ zot search "state estimation"  # find items
 zot show HRAC4E44              # inspect one, with its attachments
 zot export bibtex -c Polyhedra # export via Zotero's translators
 zot item create --file item.json  # create (needs a write-capable Zotero build)
-zot attachment import --parent HRAC4E44 --file paper.pdf
+zot attachment import --parent HRAC4E44 --path paper.pdf
 ```
 
 Point the same commands at the hosted Web API with `--web`, and get
