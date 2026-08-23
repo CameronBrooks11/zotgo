@@ -24,7 +24,9 @@ func showCommand() *cli.Command {
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			key := cmd.Args().First()
 			if key == "" {
-				return errors.New("missing item key (usage: zot show <item-key>)")
+				// FullName carries the invocation path, so the alias `item show`
+				// hints `zot item show`, not the top-level `zot show`.
+				return fmt.Errorf("missing item key (usage: %s <item-key>)", cmd.FullName())
 			}
 			mode, err := outputMode(cmd)
 			if err != nil {

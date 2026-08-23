@@ -54,7 +54,7 @@ func tagPurgeAction(ctx context.Context, cmd *cli.Command) error {
 		return errors.New("missing tag name(s) (usage: zot tag purge <tag>...)")
 	}
 	if len(names) > zotero.MaxDeleteObjects {
-		return fmt.Errorf("%d tags exceeds the %d-tag delete limit", len(names), zotero.MaxDeleteObjects)
+		return fmt.Errorf("%d tags exceeds the %d-tag purge limit", len(names), zotero.MaxDeleteObjects)
 	}
 
 	c, lib, err := resolveLibrary(ctx, cmd)
