@@ -65,7 +65,7 @@ func tagPurgeAction(ctx context.Context, cmd *cli.Command) error {
 	w := out(cmd)
 	records := make([]output.TagMutation, 0, len(names))
 	for i, n := range names {
-		records = append(records, output.TagMutation{Index: i, Operation: "delete", Status: "planned", Tag: n})
+		records = append(records, output.TagMutation{Index: i, Operation: output.OpDelete, Status: output.StatusPlanned, Tag: n})
 	}
 	if mode == output.ModeHuman {
 		fmt.Fprintf(w, "Target: %s — %s\n", lib.Name, c.BaseURL())
@@ -100,7 +100,7 @@ func tagPurgeAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	if mode != output.ModeHuman {
 		for i := range records {
-			records[i].Status = "deleted"
+			records[i].Status = output.StatusDeleted
 		}
 		return emitTagMutations(w, mode, output.NewLibrary(lib), records)
 	}
@@ -187,13 +187,15 @@ func itemTagAction(ctx context.Context, cmd *cli.Command, add bool) error {
 
 	var next []zotero.Tag
 	var changed []string
-	verb, past := "add", "added"
+	verb := "add" // human-readable label; op/pastStatus are the machine vocabulary
+	op := output.OpAdd
+	pastStatus := output.StatusAdded
 	tagOp := zotero.OpTagAdd
 	if add {
 		next, changed = addTags(data.Tags, names)
 	} else {
 		next, changed = removeTags(data.Tags, names)
-		verb, past = "remove", "removed"
+		verb, op, pastStatus = "remove", output.OpRemove, output.StatusRemoved
 		tagOp = zotero.OpTagRemove
 	}
 
@@ -208,12 +210,12 @@ func itemTagAction(ctx context.Context, cmd *cli.Command, add bool) error {
 	}
 	records := make([]output.TagMutation, 0, len(names))
 	for i, n := range names {
-		status := "unchanged"
+		status := output.StatusUnchanged
 		if remaining[n] > 0 {
-			status = "planned"
+			status = output.StatusPlanned
 			remaining[n]--
 		}
-		records = append(records, output.TagMutation{Index: i, Operation: verb, Status: status, Tag: n, Item: itemKey})
+		records = append(records, output.TagMutation{Index: i, Operation: op, Status: status, Tag: n, Item: itemKey})
 	}
 
 	w := out(cmd)
@@ -257,8 +259,8 @@ func itemTagAction(ctx context.Context, cmd *cli.Command, add bool) error {
 	}
 	if mode != output.ModeHuman {
 		for i := range records {
-			if records[i].Status == "planned" {
-				records[i].Status = past
+			if records[i].Status == output.StatusPlanned {
+				records[i].Status = pastStatus
 			}
 		}
 		return emitTagMutations(w, mode, output.NewLibrary(lib), records)

@@ -247,8 +247,8 @@ func itemCreateContext(index int, item json.RawMessage) output.ItemMutation {
 	_ = json.Unmarshal(item, &context)
 	return output.ItemMutation{
 		Index:     index,
-		Operation: "create",
-		Status:    "planned",
+		Operation: output.OpCreate,
+		Status:    output.StatusPlanned,
 		Type:      context.Type,
 		Title:     context.Title,
 	}
@@ -268,7 +268,7 @@ func itemCreateResults(items []json.RawMessage, res zotero.WriteResult) ([]outpu
 		if created, ok := res.Successful[indexText]; ok {
 			outcomes++
 			item := output.NewItem(created)
-			record.Status = "created"
+			record.Status = output.StatusCreated
 			record.Key = item.Key
 			if item.Type != "" {
 				record.Type = item.Type
@@ -279,23 +279,23 @@ func itemCreateResults(items []json.RawMessage, res zotero.WriteResult) ([]outpu
 		}
 		if key, ok := res.Unchanged[indexText]; ok {
 			outcomes++
-			record.Status = "unchanged"
+			record.Status = output.StatusUnchanged
 			record.Key = key
 		}
 		if failure, ok := res.Failed[indexText]; ok {
 			outcomes++
-			record.Status = "failed"
+			record.Status = output.StatusFailed
 			record.Key = failure.Key
-			record.Failure = &output.MutationError{Code: failure.Code, Message: failure.Message}
+			record.Failure = newFailure(failure)
 		}
 		if outcomes != 1 {
 			message := "Zotero returned no outcome for this request"
 			if outcomes > 1 {
 				message = "Zotero returned multiple outcomes for this request"
 			}
-			record.Status = "failed"
+			record.Status = output.StatusFailed
 			record.Key = ""
-			record.Failure = &output.MutationError{Message: message}
+			record.Failure = &output.Failure{Code: output.CodeUnknown, Message: message}
 			problems = append(problems, fmt.Sprintf("request index %d has %d outcomes", index, outcomes))
 		}
 		records = append(records, record)
@@ -315,6 +315,17 @@ func invalidWriteResultIndices[T any](category string, entries map[string]T, req
 		}
 	}
 	return problems
+}
+
+// newFailure maps a Zotero batch write failure to the machine-output Failure,
+// classifying its HTTP status into a FailureCode category while preserving the
+// exact number in HTTPStatus.
+func newFailure(f zotero.WriteFailure) *output.Failure {
+	return &output.Failure{
+		Code:       output.FailureCodeForStatus(f.Code),
+		HTTPStatus: f.Code,
+		Message:    f.Message,
+	}
 }
 
 func reportWriteResult(w io.Writer, res zotero.WriteResult) {
@@ -560,8 +571,8 @@ func itemPatchAction(ctx context.Context, cmd *cli.Command) error {
 	fields := patchFields(patch)
 	record := output.ItemMutation{
 		Index:     0,
-		Operation: "patch",
-		Status:    "planned",
+		Operation: output.OpPatch,
+		Status:    output.StatusPlanned,
 		Key:       key,
 		Type:      item.ItemType(),
 		Title:     item.Title(),
@@ -596,7 +607,7 @@ func itemPatchAction(ctx context.Context, cmd *cli.Command) error {
 		return writeFriendly(err)
 	}
 	if mode != output.ModeHuman {
-		record.Status = "patched"
+		record.Status = output.StatusPatched
 		return emitItemMutations(w, mode, output.NewLibrary(lib), []output.ItemMutation{record})
 	}
 	fmt.Fprintf(w, "patched %s\n", key)
@@ -661,8 +672,8 @@ func itemReplaceAction(ctx context.Context, cmd *cli.Command) error {
 	newType, newTitle := replaceContext(full)
 	record := output.ItemMutation{
 		Index:     0,
-		Operation: "replace",
-		Status:    "planned",
+		Operation: output.OpReplace,
+		Status:    output.StatusPlanned,
 		Key:       key,
 		Type:      orField(newType, item.ItemType()),
 		Title:     orField(newTitle, item.Title()),
@@ -697,7 +708,7 @@ func itemReplaceAction(ctx context.Context, cmd *cli.Command) error {
 		return writeFriendly(err)
 	}
 	if mode != output.ModeHuman {
-		record.Status = "replaced"
+		record.Status = output.StatusReplaced
 		return emitItemMutations(w, mode, output.NewLibrary(lib), []output.ItemMutation{record})
 	}
 	fmt.Fprintf(w, "replaced %s\n", key)
@@ -787,7 +798,7 @@ func itemDeleteAction(ctx context.Context, cmd *cli.Command) error {
 	for index, key := range keys {
 		item, err := c.Item(ctx, lib, key)
 		if errors.Is(err, zotero.ErrNotFound) {
-			records = append(records, output.ItemMutation{Index: index, Operation: "delete", Status: "notFound", Key: key})
+			records = append(records, output.ItemMutation{Index: index, Operation: output.OpDelete, Status: output.StatusNotFound, Key: key})
 			if mode == output.ModeHuman {
 				fmt.Fprintf(w, "  ! %s — not found, skipping\n", key)
 			}
@@ -799,8 +810,8 @@ func itemDeleteAction(ctx context.Context, cmd *cli.Command) error {
 		found = append(found, key)
 		records = append(records, output.ItemMutation{
 			Index:     index,
-			Operation: "delete",
-			Status:    "planned",
+			Operation: output.OpDelete,
+			Status:    output.StatusPlanned,
 			Key:       key,
 			Type:      item.ItemType(),
 			Title:     item.Title(),
@@ -842,8 +853,8 @@ func itemDeleteAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	if mode != output.ModeHuman {
 		for i := range records {
-			if records[i].Status == "planned" {
-				records[i].Status = "deleted"
+			if records[i].Status == output.StatusPlanned {
+				records[i].Status = output.StatusDeleted
 			}
 		}
 		return emitItemMutations(w, mode, output.NewLibrary(lib), records)

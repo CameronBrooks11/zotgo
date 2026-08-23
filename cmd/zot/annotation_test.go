@@ -101,7 +101,7 @@ func TestAnnotationListJSONAndJSONL(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &document); err != nil {
 		t.Fatalf("decode JSON: %v\n%s", err, out)
 	}
-	if document.Schema != 2 || document.Kind != "annotations" || len(document.Data) != 2 || document.Meta.Shown != 2 || document.Meta.Total != 2 {
+	if document.Schema != 3 || document.Kind != "annotations" || len(document.Data) != 2 || document.Meta.Shown != 2 || document.Meta.Total != 2 {
 		t.Fatalf("document = %#v", document)
 	}
 	if first := document.Data[0]; first.Key != "ANN00001" || first.AttachmentKey != "ATTACH01" || first.Type != "highlight" || first.PageLabel != "12" || first.Color != "#ffd400" || first.SortIndex != "00001" || !first.HasText || first.HasComment {
@@ -132,7 +132,7 @@ func TestAnnotationListJSONAndJSONL(t *testing.T) {
 		if err := json.Unmarshal([]byte(lines[i]), &record); err != nil {
 			t.Fatalf("line %d: %v", i, err)
 		}
-		if record.Schema != 2 || record.Kind != "annotation" || record.Data.Key != wantKey {
+		if record.Schema != 3 || record.Kind != "annotation" || record.Data.Key != wantKey {
 			t.Errorf("line %d = %#v", i, record)
 		}
 	}

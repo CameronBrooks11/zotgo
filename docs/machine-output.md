@@ -15,7 +15,7 @@ for every command, so a script learns it once:
 
 ```json
 {
-  "schema": 2,
+  "schema": 3,
   "kind": "items",
   "library": { "type": "user", "id": 0, "name": "My Library" },
   "data": [ { "key": "AAAA1111", "type": "journalArticle", "title": "Algae paper" } ],
@@ -46,20 +46,52 @@ body.
 - **Items** — `zot item create`, `patch`, `replace`, `delete` →
   `item-mutations`. Statuses: `planned`, `created`, `unchanged`, `patched`,
   `replaced`, `deleted`, `notFound`, `failed`. Context fields `key`, `type`,
-  `title`, and sorted patch `fields` appear when known; a failed create carries a
-  structured `failure` with `code` and `message`.
+  `title`, and sorted patch `fields` appear when known; a failed record carries a
+  structured `failure` (see [Failures](#failures)).
 - **Collections** — `zot collection create`, `rename`, `move`, `delete` →
   `collection-mutations`. Statuses: `planned`, `created`, `renamed`, `moved`,
   `deleted`, `notFound`, `unchanged`, `failed`. Records carry `key`, `name`, and
   `parentKey` when known.
-- **Tags** — `zot tag add`, `remove`, `delete` → `tag-mutations`. Each requested
+- **Tags** — `zot tag add`, `remove`, `purge` → `tag-mutations`. Each requested
   tag is one record with its `tag` name; `add`/`remove` also carry the target
-  `item`, while the library-wide `delete` omits it. Statuses: `planned`, `added`,
+  `item`, while the library-wide `purge` omits it. Statuses: `planned`, `added`,
   `removed`, `deleted`, `unchanged`. A tag already in the desired state is
-  reported `unchanged` and triggers no write.
+  reported `unchanged` and triggers no write. (`purge` reports `operation`
+  `delete`: purge is the command name, delete is the operation.)
 
 Non-dry-run machine writes require `--yes` with `--json` or `--jsonl`, so an
 automation command never falls back to an interactive prompt.
+
+#### Failures
+
+A record with `status: "failed"` (or an attachment import's `partial`/`failed`)
+carries a `failure` object with a stable shape:
+
+```json
+{ "code": "precondition-failed", "httpStatus": 412, "message": "…" }
+```
+
+`code` is a documented string category you can branch on; `httpStatus` is
+Zotero's exact status and is present only when the failure came from an HTTP
+response; `message` is human-readable. Batch write failures (item/collection/tag)
+use these category codes, derived from the status in `httpStatus`:
+
+| `code` | meaning | typical `httpStatus` |
+| --- | --- | --- |
+| `invalid` | malformed or rejected data | 400, 422 |
+| `not-found` | the target did not exist | 404 |
+| `conflict` | a conflicting object exists | 409 |
+| `precondition-failed` | the object changed concurrently | 412 |
+| `too-large` | the request exceeded a size limit | 413 |
+| `rate-limited` | Zotero throttled the request | 429, 503 |
+| `server-error` | Zotero failed internally | 5xx |
+| `unknown` | no HTTP status, or an unmapped one | — |
+
+Attachment import uses phase codes instead — `authorization-required`,
+`staged-file-failed`, `metadata-create-failed`, `metadata-create-unknown`,
+`upload-authorize-failed`, `upload-failed`, `register-failed`,
+`verification-failed` — naming the phase that failed, with `httpStatus` when the
+phase failed on an HTTP response.
 
 ### Show
 

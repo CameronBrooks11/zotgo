@@ -31,6 +31,15 @@ alias so nothing breaks — the clean form is just the default now.
   a deprecated alias. (The `--file` on `item create`/`patch`/`replace`, which
   reads JSON, is unaffected.)
 - `zot grant --operations` no longer has an `-o` shorthand; use the long flag.
+- **Machine-output schema is now 3** (`--json`/`--jsonl`). The write-failure
+  object is unified across every mutation and attachment import: its `code` is
+  now a documented string category (`invalid`, `conflict`, `precondition-failed`,
+  `too-large`, `not-found`, `rate-limited`, `server-error`, `unknown` for batch
+  writes; phase codes for import) instead of an HTTP integer, and the exact HTTP
+  status moved to a new optional `httpStatus`. A consumer that read the old
+  integer `code` should read `httpStatus`; one that switched on the import phase
+  codes is unaffected. Mutation `status` and `operation` are now documented closed
+  vocabularies. See [the machine-output contract](machine-output.md).
 
 ## [0.10.0] - 2026-08-21
 

@@ -14,7 +14,12 @@ package output
 // 2: dropped Item.Version and Collection.Version. An object version is scoped to
 // the endpoint that issued it, and the Local API's versions have no durable
 // meaning zotgo can promise (see dto.go).
-const SchemaVersion = 2
+//
+// 3: unified write-failure schema. A mutation/import failure's `code` is now a
+// documented string category (FailureCode) rather than an HTTP integer, and the
+// exact HTTP status moved to the optional `httpStatus`. Status and operation
+// values are now closed vocabularies (see vocab.go).
+const SchemaVersion = 3
 
 // Kind discriminates a Document's payload.
 type Kind string

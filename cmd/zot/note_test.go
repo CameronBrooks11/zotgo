@@ -82,7 +82,7 @@ func TestNoteShowAllOutputModes(t *testing.T) {
 		if err := json.Unmarshal([]byte(out), &document); err != nil {
 			t.Fatalf("decode %s: %v\n%s", mode, err, out)
 		}
-		if document.Schema != 2 || document.Kind != "note" || document.Data["key"] != "NOTE0001" || document.Data["parentKey"] != "PARENT01" || document.Data["html"] != `<div data-schema-version="9"><p>EXACT BODY</p></div>` {
+		if document.Schema != 3 || document.Kind != "note" || document.Data["key"] != "NOTE0001" || document.Data["parentKey"] != "PARENT01" || document.Data["html"] != `<div data-schema-version="9"><p>EXACT BODY</p></div>` {
 			t.Fatalf("%s document = %#v", mode, document)
 		}
 		if len(document.Data) != 6 || strings.Contains(out, `"version"`) || strings.Contains(out, "futureTop") || strings.Contains(out, "futureData") {

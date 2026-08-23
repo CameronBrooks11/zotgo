@@ -619,13 +619,13 @@ func TestItemCreateMachinePartialResultOrderedBeforeExit(t *testing.T) {
 	if len(doc.Data) != 3 {
 		t.Fatalf("data = %+v", doc.Data)
 	}
-	wantStatuses := []string{"unchanged", "failed", "created"}
+	wantStatuses := []output.Status{output.StatusUnchanged, output.StatusFailed, output.StatusCreated}
 	for i, record := range doc.Data {
 		if record.Index != i || record.Status != wantStatuses[i] {
 			t.Errorf("record %d = %+v", i, record)
 		}
 	}
-	if doc.Data[1].Title != "Fallback title" || doc.Data[1].Failure == nil || doc.Data[1].Failure.Code != 400 {
+	if doc.Data[1].Title != "Fallback title" || doc.Data[1].Failure == nil || doc.Data[1].Failure.Code != output.CodeInvalid || doc.Data[1].Failure.HTTPStatus != 400 {
 		t.Errorf("failed record lost context: %+v", doc.Data[1])
 	}
 	if strings.Contains(got, `"version"`) || strings.Contains(got, "Target:") {
@@ -669,7 +669,7 @@ func TestItemCreateResultsRejectsInvalidOutcomes(t *testing.T) {
 	if records[0].Status != "failed" || records[0].Failure == nil || records[1].Status != "failed" || records[1].Failure == nil {
 		t.Fatalf("missing/duplicate outcomes not represented: %+v", records)
 	}
-	if records[2].Status != "failed" || records[2].Failure == nil || records[2].Failure.Code != 400 {
+	if records[2].Status != "failed" || records[2].Failure == nil || records[2].Failure.Code != output.CodeInvalid || records[2].Failure.HTTPStatus != 400 {
 		t.Fatalf("valid failed outcome lost: %+v", records[2])
 	}
 	encoded, err := json.Marshal(records[1])
@@ -770,7 +770,7 @@ func TestItemDeleteMachineNotFoundOrderingAndTransportFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	doc := decodeItemMutationDocument(t, got)
-	wantStatuses := []string{"notFound", "planned", "notFound", "planned"}
+	wantStatuses := []output.Status{output.StatusNotFound, output.StatusPlanned, output.StatusNotFound, output.StatusPlanned}
 	if len(doc.Data) != len(wantStatuses) {
 		t.Fatalf("data = %+v", doc.Data)
 	}
@@ -798,7 +798,7 @@ func TestItemDeleteMachineNotFoundOrderingAndTransportFailure(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("delete JSONL lines = %d: %s", len(lines), got)
 	}
-	for i, wantStatus := range []string{"deleted", "notFound"} {
+	for i, wantStatus := range []output.Status{output.StatusDeleted, output.StatusNotFound} {
 		var lineDoc struct {
 			Kind output.Kind         `json:"kind"`
 			Data output.ItemMutation `json:"data"`

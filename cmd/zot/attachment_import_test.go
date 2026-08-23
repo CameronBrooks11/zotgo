@@ -414,7 +414,7 @@ func TestAttachmentImportJSONSuccess(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &doc); err != nil {
 		t.Fatalf("decode JSON: %v\n%s", err, out)
 	}
-	if doc.Schema != 2 || doc.Kind != "attachment-import" || doc.Data.Status != "imported" || doc.Data.Stage != "verified" || doc.Data.ParentKey != "PARENT01" || doc.Data.AttachmentKey == nil || *doc.Data.AttachmentKey != state.attachmentKey || doc.Data.Filename != "managed.pdf" {
+	if doc.Schema != 3 || doc.Kind != "attachment-import" || doc.Data.Status != "imported" || doc.Data.Stage != "verified" || doc.Data.ParentKey != "PARENT01" || doc.Data.AttachmentKey == nil || *doc.Data.AttachmentKey != state.attachmentKey || doc.Data.Filename != "managed.pdf" {
 		t.Fatalf("document = %#v", doc)
 	}
 	if doc.Data.FileStatus.State != "metadata-available" || doc.Data.Failure != nil {
