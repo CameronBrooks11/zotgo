@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
 
+# Least privilege by default: these jobs only read the repository.
+# A job needing more declares it itself, so the elevation stays visible
+# at the job that uses it.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
