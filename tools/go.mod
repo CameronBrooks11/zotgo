@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/golangci/misspell v0.8.0
 	golang.org/x/vuln v1.7.0
-	honnef.co/go/tools v0.8.0
+	honnef.co/go/tools v0.8.1
 )
 
 require (
