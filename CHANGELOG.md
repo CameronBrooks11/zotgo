@@ -10,6 +10,15 @@ Planned and outstanding work is tracked in the
 
 ## [Unreleased]
 
+### Changed
+
+- `zot grant --ttl` now accepts up to **30 days** (was 24h), so a recurring job
+  can hold one lease across its whole cycle instead of failing closed daily until
+  a human is at a terminal. There is still no unexpiring lease. A TTL above 24h is
+  long-lived: `zot grant` takes a second confirmation naming the concrete end
+  date, and `zot grant status` marks the lease `LONG-LIVED` and shows the time it
+  has left. Leases of 24h or less are unchanged. ([#93](https://github.com/CameronBrooks11/zotgo/issues/93))
+
 ## [0.11.0] - 2026-08-23
 
 Two threads toward 1.0: CLI-surface ergonomics — renames and a new argument

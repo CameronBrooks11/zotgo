@@ -156,3 +156,62 @@ func seedLeaseScoped(t *testing.T, expires time.Time, ops ...zotero.Operation) {
 		t.Fatalf("saveLease: %v", err)
 	}
 }
+
+// The TTL bounds are what keep a grant from standing in for the removed
+// all-or-nothing switch, so they are checked directly: minting demands a TTY,
+// which a test does not have, and the terminal refusal fires before validation.
+func TestValidateTTL(t *testing.T) {
+	cases := []struct {
+		name    string
+		ttl     time.Duration
+		wantErr string
+	}{
+		{"zero", 0, "must be positive"},
+		{"negative", -time.Minute, "must be positive"},
+		{"default", DefaultLeaseTTL, ""},
+		{"at the long-lived threshold", LongLeaseTTL, ""},
+		{"a week", 7 * 24 * time.Hour, ""},
+		{"at the maximum", MaxLeaseTTL, ""},
+		{"past the maximum", MaxLeaseTTL + time.Minute, "exceeds the maximum"},
+		{"a year", 365 * 24 * time.Hour, "exceeds the maximum"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateTTL(tc.ttl)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validateTTL(%s) = %v, want nil", tc.ttl, err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("validateTTL(%s) = %v, want an error containing %q", tc.ttl, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+// isLongLived measures the granted span, not the time left, so a month-long
+// lease stays flagged on its final hour rather than quietly looking routine.
+func TestLeaseIsLongLived(t *testing.T) {
+	created := time.Now().Add(-29 * 24 * time.Hour)
+	cases := []struct {
+		name    string
+		created time.Time
+		expires time.Time
+		want    bool
+	}{
+		{"30-minute default", created, created.Add(DefaultLeaseTTL), false},
+		{"exactly the threshold", created, created.Add(LongLeaseTTL), false},
+		{"just past the threshold", created, created.Add(LongLeaseTTL + time.Minute), true},
+		{"month-long, nearly spent", created, created.Add(MaxLeaseTTL), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			l := &lease{Created: tc.created, Expires: tc.expires}
+			if got := l.isLongLived(); got != tc.want {
+				t.Errorf("isLongLived() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
