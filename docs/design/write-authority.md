@@ -186,7 +186,9 @@ a time**. Shape:
   desktop GUI a human must click; `zot grant` ties the lease to a successful
   authorize and stores the resulting key *in the lease*.
 - It takes **`--ttl`** (e.g. `--ttl 30m`) with a bounded default (30m) and a
-  documented maximum. There is no unexpiring lease.
+  documented maximum (30 days). There is no unexpiring lease. A TTL above 24h is
+  **long-lived** and takes a second confirmation naming the concrete end date;
+  `grant status` flags it for as long as it runs (see [Q7](#q7-ttl-ceiling)).
 - Before confirming, it **prints the concrete authorization** — resolved library,
   operations, and the count of items currently in scope — as the pre-grant
   blast-radius picture. (`--dry-run` remains the after-the-fact per-write preview;
@@ -373,6 +375,37 @@ forged lease. The premise that "Always Allow" suppresses the modal on later
 authorizes is **provisional** — `docs/zotero-api.md` documents single-use only for
 plain "Allow" — and is marked pending live verification; the conclusion holds
 either way, since a silent re-authorize would equally defeat a per-write modal.
+
+### <a id="q7-ttl-ceiling"></a>Q7 — TTL ceiling: **30 days, never unexpiring**
+
+The original ceiling was 24h. That is below the period of the very caller this
+document names first — a cron sync — so a recurring job failed closed at the same
+time every day, and recovery needed a human at a terminal to approve Zotero's
+modal. `zot grant` requires a TTY by design, so there was no way to close that
+gap from the automation side. Raised in [#93](https://github.com/CameronBrooks11/zotgo/issues/93),
+which asked for an **"until revoked"** lease.
+
+The ceiling is raised to **30 days**; an unexpiring lease is still refused. The
+distinction is the point. What Goal 3 defends is not a short window — it is that
+**authority ends on a date the human set, whether or not anyone acts**. A 30-day
+lease keeps that property; "until revoked" makes the end of authority depend on
+someone remembering, which is the failure the lease exists to survive. It would
+also restore the all-or-nothing switch the lease replaced, and leave the bound
+write key on disk indefinitely with no rotation boundary — reopening the
+persisted-"Always Allow" replay hole [Q5](#q5-always-allow) closed. The contained
+blast radius here is *scope × time*; an unexpiring grant removes one axis outright.
+
+The 24h figure is kept as the **long-lived threshold** rather than discarded: a
+lease above it takes its own confirmation naming the end date, and is flagged by
+`grant status` for its whole life. So every lease that was mintable before is
+still mintable with exactly the friction it had, and the new range is opt-in and
+visible.
+
+Two alternatives were considered and rejected. A **`grant renew`** that extends an
+existing lease without re-authorizing is a cheaper ritual but still needs a human
+every day, so it does not address the cron case; it remains available as additive
+sugar. **Non-interactive renewal inside a longer outer window** is a refresh
+token: it reconstructs unbounded authority with more moving parts to get wrong.
 
 ### <a id="q6-canonical-library-identity"></a>Q6 — Canonical library identity
 

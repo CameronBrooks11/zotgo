@@ -151,11 +151,22 @@ capability; without one, a non-interactive write fails closed with
 
 ```bash
 zot grant                                  # 30-min lease, all non-destructive ops, My Library
-zot grant --ttl 2h --operations item.patch # narrower scope and lifetime (max 24h)
+zot grant --ttl 2h --operations item.patch # narrower scope and lifetime (max 720h)
+zot grant --ttl 168h                       # a week, for a recurring job (see below)
 zot grant --note "cleanup for project X"   # a note recorded in the lease and audit log
 zot grant status                           # show the active lease and its audit summary
 zot grant revoke                           # end it early
 ```
+
+**Long-lived leases.** A lease may run up to **30 days** (`--ttl 720h`), so a
+recurring job — a nightly sync, a weekly cleanup — can hold one lease across its
+whole cycle instead of failing closed every day until you are back at a terminal.
+There is still **no unexpiring lease**: what the design guarantees is that
+authority ends on a date *you* set, whether or not anyone remembers to revoke it.
+Anything above 24h is treated as long-lived — `zot grant` asks a second time and
+names the concrete end date, and `zot grant status` marks it `LONG-LIVED` with the
+time it has left for as long as it runs. Revoke it as soon as the job that needed
+it is done.
 
 `zot grant` is deliberately the inverse of every other write command: it **must**
 run in an interactive terminal (a human approves Zotero's authorize modal and the

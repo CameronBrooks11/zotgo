@@ -26,7 +26,7 @@ func grantCommand() *cli.Command {
 			"are then allowed only within it until it expires. Interactive writes you confirm\n" +
 			"yourself never need a lease. See docs/design/write-authority.md.",
 		Flags: []cli.Flag{
-			&cli.DurationFlag{Name: "ttl", Value: DefaultLeaseTTL, Usage: "how long the lease is valid (max 24h)"},
+			&cli.DurationFlag{Name: "ttl", Value: DefaultLeaseTTL, Usage: "how long the lease is valid (max 720h; over 24h takes an extra confirmation)"},
 			&cli.StringSliceFlag{Name: "operations", Usage: "operations to allow (default: all non-destructive writes)"},
 			&cli.StringFlag{Name: "note", Usage: "a note recorded in the lease and its audit log"},
 		},
@@ -53,11 +53,8 @@ func grantAction(ctx context.Context, cmd *cli.Command) error {
 		return errors.New("zot grant authorizes local writes; a Web API key is scoped and revoked at https://www.zotero.org/settings/keys")
 	}
 	ttl := cmd.Duration("ttl")
-	if ttl <= 0 {
-		return errors.New("--ttl must be positive")
-	}
-	if ttl > MaxLeaseTTL {
-		return fmt.Errorf("--ttl %s exceeds the maximum %s", ttl, MaxLeaseTTL)
+	if err := validateTTL(ttl); err != nil {
+		return err
 	}
 	ops, err := resolveGrantOperations(cmd.StringSlice("operations"))
 	if err != nil {
@@ -81,6 +78,10 @@ func grantAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	fmt.Fprintf(w, "  operations: %s\n", strings.Join(ops, ", "))
 	fmt.Fprintf(w, "  expires:    %s (in %s)\n", expires.Format(time.RFC3339), ttl)
+	if !confirmLongLease(os.Stdin, w, ttl, expires) {
+		fmt.Fprintln(w, "Aborted.")
+		return nil
+	}
 	if !confirm(os.Stdin, w, "Approve this scope and authorize in Zotero?") {
 		fmt.Fprintln(w, "Aborted.")
 		return nil
@@ -118,6 +119,23 @@ func grantAction(ctx context.Context, cmd *cli.Command) error {
 	return nil
 }
 
+// confirmLongLease gates a lease that outlives LongLeaseTTL behind its own
+// confirmation. That is the case worth slowing down: it is the one a human is
+// likeliest to forget, so the prompt names the concrete end date rather than a
+// duration the reader has to add up. A lease at or under the threshold is not
+// long-lived and is not prompted for, so the friction is opt-in with the TTL.
+// It takes its reader and writer as arguments so the prompt is testable without
+// a terminal.
+func confirmLongLease(in io.Reader, w io.Writer, ttl time.Duration, expires time.Time) bool {
+	if ttl <= LongLeaseTTL {
+		return true
+	}
+	end := expires.Format(time.RFC3339)
+	fmt.Fprintf(w, "\nThis lease is long-lived: non-interactive writes stay authorized for %s,\n", ttl)
+	fmt.Fprintf(w, "until %s, unless you end it early with 'zot grant revoke'.\n", end)
+	return confirm(in, w, fmt.Sprintf("Keep this lease open until %s?", end))
+}
+
 func grantStatusCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "status",
@@ -137,8 +155,12 @@ func grantStatusAction(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 	state := "active"
-	if time.Now().After(l.Expires) {
+	expired := time.Now().After(l.Expires)
+	switch {
+	case expired:
 		state = "EXPIRED"
+	case l.isLongLived():
+		state = "active, LONG-LIVED"
 	}
 	fmt.Fprintf(w, "Lease %s (%s)\n", l.ID, state)
 	fmt.Fprintf(w, "  created:    %s\n", l.Created.Format(time.RFC3339))
@@ -155,6 +177,12 @@ func grantStatusAction(_ context.Context, cmd *cli.Command) error {
 	// These count authorization decisions, not confirmed writes — an allowed write
 	// can still fail Zotero's own preconditions afterwards.
 	fmt.Fprintf(w, "              %d allowed, %d refused (authorization decisions)\n", allowed, refused)
+	// After the field table, not inside it: a long-lived lease is the one most
+	// likely to be forgotten, so the reminder is the last thing on screen.
+	if !expired && l.isLongLived() {
+		fmt.Fprintf(w, "\nThis lease was granted for %s and still has %s to run.\n", l.Expires.Sub(l.Created).Round(time.Minute), time.Until(l.Expires).Round(time.Minute))
+		fmt.Fprintln(w, "End it with 'zot grant revoke' once the job that needs it is done.")
+	}
 	return nil
 }
 

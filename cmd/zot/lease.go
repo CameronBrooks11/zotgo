@@ -38,11 +38,41 @@ type leaseScope struct {
 }
 
 // MaxLeaseTTL bounds how long a lease may live, so an over-long grant cannot
-// stand in for the removed all-or-nothing switch.
-const MaxLeaseTTL = 24 * time.Hour
+// stand in for the removed all-or-nothing switch. The invariant it defends is
+// that authority ends on a date the human set, whether or not anyone acts —
+// not that the window is short. A month, rather than a day, lets a recurring
+// job (a nightly sync) hold one lease across its whole cycle instead of failing
+// closed daily until a human is at a terminal; see #93.
+const MaxLeaseTTL = 30 * 24 * time.Hour
+
+// LongLeaseTTL is the lifetime above which a grant counts as long-lived: it
+// takes a second, explicit confirmation naming the end date, and `grant status`
+// flags it. It is the previous maximum, so every lease mintable before is still
+// mintable with exactly the friction it had.
+const LongLeaseTTL = 24 * time.Hour
 
 // DefaultLeaseTTL is the lease lifetime when --ttl is omitted.
 const DefaultLeaseTTL = 30 * time.Minute
+
+// validateTTL bounds a requested lease lifetime. It lives apart from grantAction
+// so the bounds are testable without a terminal (minting demands a TTY, which a
+// test does not have).
+func validateTTL(ttl time.Duration) error {
+	if ttl <= 0 {
+		return errors.New("--ttl must be positive")
+	}
+	if ttl > MaxLeaseTTL {
+		return fmt.Errorf("--ttl %s exceeds the maximum %s", ttl, MaxLeaseTTL)
+	}
+	return nil
+}
+
+// isLongLived reports whether the lease was granted for longer than
+// LongLeaseTTL. It measures the granted span, not the time left, so a month-long
+// lease stays flagged on its final hour.
+func (l *lease) isLongLived() bool {
+	return l.Expires.Sub(l.Created) > LongLeaseTTL
+}
 
 var (
 	// ErrNoActiveLease means no lease file is present: a non-interactive write has

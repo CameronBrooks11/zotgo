@@ -225,3 +225,70 @@ func TestAuditRecordsRefusalAndStatusCounts(t *testing.T) {
 		t.Errorf("status missing audit summary:\n%s", out)
 	}
 }
+
+// A long-lived lease is the one a human is likeliest to forget about, so status
+// must say so plainly rather than rendering it as a routine "active" lease.
+func TestGrantStatusFlagsLongLivedLease(t *testing.T) {
+	seedLeaseScoped(t, time.Now().Add(MaxLeaseTTL), zotero.OpItemPatch)
+
+	out, _, err := runCLI("http://127.0.0.1:0", "grant", "status")
+	if err != nil {
+		t.Fatalf("grant status: %v", err)
+	}
+	for _, want := range []string{"LONG-LIVED", "grant revoke"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("status missing %q for a month-long lease in:\n%s", want, out)
+		}
+	}
+}
+
+// The flag is for long grants only: a default 30-minute lease must not be
+// dressed up as something the user needs to go clean up.
+func TestGrantStatusDoesNotFlagShortLease(t *testing.T) {
+	seedLeaseScoped(t, time.Now().Add(DefaultLeaseTTL), zotero.OpItemPatch)
+
+	out, _, err := runCLI("http://127.0.0.1:0", "grant", "status")
+	if err != nil {
+		t.Fatalf("grant status: %v", err)
+	}
+	if strings.Contains(out, "LONG-LIVED") {
+		t.Errorf("a 30-minute lease was flagged long-lived:\n%s", out)
+	}
+}
+
+// The extra confirmation is the whole friction budget for a long lease, so it
+// must fire above the threshold, stay silent at or below it, and treat anything
+// but an explicit yes as a refusal.
+func TestConfirmLongLease(t *testing.T) {
+	expires := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name       string
+		ttl        time.Duration
+		answer     string
+		want       bool
+		wantPrompt bool
+	}{
+		{"default TTL is not prompted", DefaultLeaseTTL, "", true, false},
+		{"threshold itself is not prompted", LongLeaseTTL, "", true, false},
+		{"just past the threshold, accepted", LongLeaseTTL + time.Minute, "y\n", true, true},
+		{"a month, accepted", MaxLeaseTTL, "yes\n", true, true},
+		{"a month, declined", MaxLeaseTTL, "n\n", false, true},
+		{"a month, empty answer defaults to no", MaxLeaseTTL, "\n", false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf strings.Builder
+			got := confirmLongLease(strings.NewReader(tc.answer), &buf, tc.ttl, expires)
+			if got != tc.want {
+				t.Errorf("confirmLongLease(%s, %q) = %v, want %v", tc.ttl, tc.answer, got, tc.want)
+			}
+			if prompted := strings.Contains(buf.String(), "long-lived"); prompted != tc.wantPrompt {
+				t.Errorf("prompted = %v, want %v; output:\n%s", prompted, tc.wantPrompt, buf.String())
+			}
+			// The point of the second prompt is the concrete date, not a duration.
+			if tc.wantPrompt && !strings.Contains(buf.String(), "2026-09-26T12:00:00Z") {
+				t.Errorf("prompt did not name the end date:\n%s", buf.String())
+			}
+		})
+	}
+}
