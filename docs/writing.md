@@ -150,11 +150,11 @@ capability; without one, a non-interactive write fails closed with
 `run 'zot grant'`.
 
 ```bash
-zot grant                                   # 30-min lease, all non-destructive ops, My Library
-zot grant --ttl 2h -o item.patch -o tag.add # narrower scope and lifetime (max 24h)
-zot grant --note "cleanup for project X"    # a note recorded in the lease and audit log
-zot grant status                            # show the active lease and its audit summary
-zot grant revoke                            # end it early
+zot grant                                  # 30-min lease, all non-destructive ops, My Library
+zot grant --ttl 2h --operations item.patch # narrower scope and lifetime (max 24h)
+zot grant --note "cleanup for project X"   # a note recorded in the lease and audit log
+zot grant status                           # show the active lease and its audit summary
+zot grant revoke                           # end it early
 ```
 
 `zot grant` is deliberately the inverse of every other write command: it **must**
