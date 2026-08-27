@@ -10,14 +10,24 @@ Planned and outstanding work is tracked in the
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-08-27
+
+One change, from a contributor report: the write-lease ceiling sat below the
+period of the recurring jobs a lease is meant to serve, so a nightly sync failed
+closed every day until a human was back at a terminal. Leases may now run up to
+30 days, with new friction above the old 24h mark. There is still **no
+unexpiring lease** — what the design guarantees is that authority ends on a date
+you set, whether or not anyone remembers to revoke it.
+
 ### Changed
 
 - `zot grant --ttl` now accepts up to **30 days** (was 24h), so a recurring job
   can hold one lease across its whole cycle instead of failing closed daily until
-  a human is at a terminal. There is still no unexpiring lease. A TTL above 24h is
-  long-lived: `zot grant` takes a second confirmation naming the concrete end
-  date, and `zot grant status` marks the lease `LONG-LIVED` and shows the time it
-  has left. Leases of 24h or less are unchanged. ([#93](https://github.com/CameronBrooks11/zotgo/issues/93))
+  a human is at a terminal. A TTL above 24h is long-lived: `zot grant` takes a
+  second confirmation naming the concrete end date, and `zot grant status` marks
+  the lease `LONG-LIVED` and shows the time it has left. Leases of 24h or less
+  behave exactly as before, and the machine-output schema is unaffected.
+  ([#93](https://github.com/CameronBrooks11/zotgo/issues/93))
 
 ## [0.11.0] - 2026-08-23
 
@@ -295,7 +305,8 @@ contract before scripts could depend on it.
   `collections`, `stats`. Zero-dependency static binary and a goreleaser release
   pipeline.
 
-[Unreleased]: https://github.com/CameronBrooks11/zotgo/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/CameronBrooks11/zotgo/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.8.0...v0.9.0
