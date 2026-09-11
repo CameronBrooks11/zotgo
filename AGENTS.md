@@ -74,6 +74,30 @@ when `ZOTGO_LIVE_ANNOTATED_ATTACHMENT` names an attachment (PDF/EPUB) carrying a
 least a highlight and a note with distinct sort indexes; unset, it discovers or
 skips. Sync that attachment so the `--web` variant sees the same key.
 
+### Use a throwaway profile
+
+The live suite and any hand-run probing write to whatever library the Local API
+is serving, and that is simply **whichever profile Zotero is running** — the port
+is the same either way, and nothing in a response says which library you reached.
+Point it at your real library and a stray write lands in your research.
+
+So do live work in a dedicated Zotero profile with its own data directory.
+`zotero --ProfileManager` opens the profile manager (`-P <name>` goes straight to
+a named profile); set that profile's data directory under Settings → Advanced,
+which writes `extensions.zotero.dataDir` in its `prefs.js`. The Local API toggle
+(`extensions.zotero.httpServer.localAPI.enabled`) is per profile too, so enabling
+it once does not enable it everywhere.
+
+Two traps follow from that:
+
+- `profiles.ini` marks one profile `Default=1`, and a bare `zotero` opens it. That
+  may not be the profile you assume. Confirm the data directory before trusting
+  what you see.
+- A small, collection-free, group-free library is a fact about the profile you
+  happen to be on, not about Zotero. Do not generalise API behaviour from it —
+  anything needing a group library cannot be observed on a personal-only profile
+  at all, and should be called out as untested rather than inferred.
+
 ## Conventions
 
 - Commit messages: Conventional Commits (`type(scope): description`), imperative
