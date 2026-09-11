@@ -421,6 +421,48 @@ in `docs/zotero-api.md`. Real-numeric-id canonicalization only becomes relevant 
 `--web` (phase 3), where the user id is real on both sides. A table test covers the
 `user:0` and group forms.
 
+### <a id="q8-ingestion-scope"></a>Q8 — Ingestion: **authorize the resolved target, and stay out of the default grant**
+
+Connector ingestion (`zot ingest bib|pdf|url`, #21) conforms to the lease model
+like every other write, with one difference that has to be handled rather than
+waved through: **its destination is chosen by the GUI, not by the command line.**
+
+*Authorize against the resolved target.* The Connector saves to whatever the
+Zotero UI has selected, so the library an ingest writes to is not knowable from
+the argv the user typed. The authorizer must therefore be consulted against the
+**resolved** destination, not an assumed one. This is achievable because
+`getSelectedCollection` answers before any write happens — resolve first, then
+authorize, then write. A command that cannot name its destination must not be
+able to authorize one.
+
+*Excluded from the default grant.* `defaultGrantOperations()` grants every
+operation that is not in `destructiveOperations`, where destructive means **can
+lose data**. Import only adds items, so that rule would admit it automatically.
+It should not, and the rule needs a second exclusion rather than a special case:
+
+- **destructive** — the write can lose data (`item.delete`, `collection.delete`,
+  `tag.delete`)
+- **nondeterministic target** — the write's destination is chosen outside the
+  command (the `ingest.*` operations)
+
+Both are withheld from an omitted `--operations` for the same underlying reason:
+a default grant should only authorize writes whose blast radius the person
+minting it could actually predict. A 30-day default lease plus `--yes` in a
+script would otherwise deposit items into whichever collection happened to be
+selected in the sidebar, which is not something the mint-time prompt can
+meaningfully warn about. Naming `ingest.bib` explicitly is a small cost paid
+once, by someone who has just been told where it will write.
+
+Duplicates are a related but separate matter and deliberately **not** a reason for
+exclusion: Zotero's import silently creates duplicates with no dedup and nothing
+in the response marking a match (see `docs/zotero-api.md`). That is noise, and
+recoverable by deleting — it is not data loss, and it does not carry the
+prediction problem above.
+
+The `ingest.bib` token enters the vocabulary when #99 lands, following the
+precedent `attachment.import` set in #52; the Q3 list above describes the
+vocabulary as it currently ships.
+
 ## Phased rollout
 
 1. **Lease core.** *(Shipped.)* The `0600` single-lease file (id, created, expires, library
@@ -439,7 +481,11 @@ in `docs/zotero-api.md`. Real-numeric-id canonicalization only becomes relevant 
    write path, then verify a user-supplied library-scoped key (subset check,
    fail-closed on unmappable identity). OAuth mint/revoke is **not** in scope —
    deferred indefinitely until a concrete demand justifies the code.
-4. **Docs + harness belt.** *(User docs shipped in `writing.md`.)* Document the
+4. **#99 conforms.** *(Roadmap.)* Add `ingest.bib` to the vocabulary as a
+   nondeterministic-target operation — withheld from the default grant, and
+   authorized against the destination `getSelectedCollection` resolves rather
+   than an assumed one (see Q8).
+5. **Docs + harness belt.** *(User docs shipped in `writing.md`.)* Document the
    model (including the honest limitations and the local-key residual); add the
    caller deny-rule guidance.
 
