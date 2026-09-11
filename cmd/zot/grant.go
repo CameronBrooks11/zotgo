@@ -43,6 +43,19 @@ func grantAction(ctx context.Context, cmd *cli.Command) error {
 		suggestion := cli.SuggestCommand(cmd.Commands, arg)
 		return fmt.Errorf("unknown grant subcommand %q; did you mean %q? (see `zot grant --help`)", arg, suggestion)
 	}
+	// The library a lease covers is never inferred. Every other command defaults
+	// to My Library harmlessly — a read reaches the wrong library and you see it
+	// immediately. A grant does not: an omitted selector silently authorizes
+	// writes across the largest library on the account, which after a session
+	// spent in a group library is rarely the intended one. ZOTGO_LIBRARY counts
+	// as explicit, so a session that already sets it is unaffected.
+	//
+	// Checked before the TTY gate because it is pure argument validation and the
+	// only caller a TTY refusal would reach is a script, which cannot mint a
+	// lease at all.
+	if strings.TrimSpace(cmd.String("library")) == "" {
+		return errors.New("zot grant requires an explicit library: pass --library (`me` for My Library, or a group name or id) or set ZOTGO_LIBRARY — a write lease never infers its target (see docs/design/write-authority.md)")
+	}
 	// Minting is deliberately the inverse of every other write command: it demands
 	// an interactive human. An agent cannot approve Zotero's modal, and --yes does
 	// not apply here.

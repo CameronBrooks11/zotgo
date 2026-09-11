@@ -189,6 +189,12 @@ a time**. Shape:
   documented maximum (30 days). There is no unexpiring lease. A TTL above 24h is
   **long-lived** and takes a second confirmation naming the concrete end date;
   `grant status` flags it for as long as it runs (see [Q7](#q7-ttl-ceiling)).
+- It **requires an explicit library** — `--library`, or `ZOTGO_LIBRARY` for the
+  session. This is the one command whose target is never inferred: every other
+  command's My Library default is self-correcting (a read reaches the wrong
+  library and the user sees it), while a lease's is not, silently authorizing
+  writes over the largest library on the account. Declining to guess costs one
+  flag and removes the failure mode.
 - Before confirming, it **prints the concrete authorization** — resolved library,
   operations, and the count of items currently in scope — as the pre-grant
   blast-radius picture. (`--dry-run` remains the after-the-fact per-write preview;

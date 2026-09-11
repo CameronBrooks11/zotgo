@@ -150,10 +150,11 @@ capability; without one, a non-interactive write fails closed with
 `run 'zot grant'`.
 
 ```bash
-zot grant                                  # 30-min lease, all non-destructive ops, My Library
-zot grant --ttl 2h --operations item.patch # narrower scope and lifetime (max 720h)
-zot grant --ttl 168h                       # a week, for a recurring job (see below)
-zot grant --note "cleanup for project X"   # a note recorded in the lease and audit log
+zot grant --library me                     # 30-min lease, all non-destructive ops, My Library
+zot grant --library "Lab Group"            # a group library, named explicitly
+zot grant -L me --ttl 2h --operations item.patch  # narrower scope and lifetime (max 720h)
+zot grant -L me --ttl 168h                 # a week, for a recurring job (see below)
+zot grant -L me --note "cleanup for project X"    # recorded in the lease and audit log
 zot grant status                           # show the active lease and its audit summary
 zot grant revoke                           # end it early
 ```
@@ -167,6 +168,13 @@ Anything above 24h is treated as long-lived — `zot grant` asks a second time a
 names the concrete end date, and `zot grant status` marks it `LONG-LIVED` with the
 time it has left for as long as it runs. Revoke it as soon as the job that needed
 it is done.
+
+**The library is never inferred.** `--library` (or `ZOTGO_LIBRARY` for the
+session) is required for `grant` alone. Every other command defaults to My
+Library harmlessly — a read reaches the wrong library and you see it. A lease
+does not: an omitted selector would silently authorize writes across your
+largest library, which after an afternoon in a group library is rarely the one
+you meant.
 
 `zot grant` is deliberately the inverse of every other write command: it **must**
 run in an interactive terminal (a human approves Zotero's authorize modal and the
