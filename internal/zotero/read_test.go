@@ -317,3 +317,29 @@ func TestStatusErrorPreservesUnexpectedResponse(t *testing.T) {
 		t.Fatalf("statusErr = %+v", statusErr)
 	}
 }
+
+func TestCreatorSummary_StripsBidiIsolates(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		// Zotero 7 and 10 embed U+2068/U+2069 around each name in
+		// multi-creator summaries (issue #111).
+		{name: "multi-creator summary", raw: "\u2068Lee\u2069 and \u2068Baranowski\u2069", want: "Lee and Baranowski"},
+		{name: "all four isolate code points", raw: "\u2066L\u2067R\u2068F\u2069P", want: "LRFP"},
+		{name: "et al. form is untouched", raw: "Schmidt et al.", want: "Schmidt et al."},
+		{name: "single creator is untouched", raw: "Posten", want: "Posten"},
+		{name: "empty summary", raw: "", want: ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			envelope := Envelope{Meta: map[string]json.RawMessage{
+				"creatorSummary": json.RawMessage(`"` + tc.raw + `"`),
+			}}
+			if got := envelope.CreatorSummary(); got != tc.want {
+				t.Errorf("CreatorSummary = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

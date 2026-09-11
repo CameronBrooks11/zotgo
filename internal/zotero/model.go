@@ -600,9 +600,22 @@ func (e Envelope) ItemType() string {
 	return item.ItemType
 }
 
-// CreatorSummary returns meta.creatorSummary.
+// CreatorSummary returns meta.creatorSummary with the Unicode directional
+// isolates (U+2066–U+2069) stripped. Zotero wraps each name in a
+// multi-creator summary with FSI/PDI; they render invisibly in a terminal
+// but reach scripting consumers as unseen control characters.
 func (e Envelope) CreatorSummary() string {
-	return rawString(e.Meta["creatorSummary"])
+	return stripBidiIsolates(rawString(e.Meta["creatorSummary"]))
+}
+
+// stripBidiIsolates removes the four Unicode directional isolate code points.
+func stripBidiIsolates(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 0x2066 && r <= 0x2069 {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // ParsedDate returns meta.parsedDate.
