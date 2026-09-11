@@ -88,6 +88,21 @@ which writes `extensions.zotero.dataDir` in its `prefs.js`. The Local API toggle
 (`extensions.zotero.httpServer.localAPI.enabled`) is per profile too, so enabling
 it once does not enable it everywhere.
 
+**A pref is a request; an isolated `HOME` is a boundary.** For anything scripted —
+seeding, a version probe, CI — do not rely on the data-directory pref alone:
+
+- `extensions.zotero.dataDir` is **inert on its own**. It is gated behind
+  `extensions.zotero.useDataDir`, which defaults to `false`. Set only `dataDir`
+  and Zotero silently ignores it, opens the default `~/Zotero` — a real library
+  on most machines — and rewrites the pref file to record that it did.
+- `extensions.zotero.httpServer.port` (default 23119) *is* honoured, so a test
+  instance can serve its own port alongside a normal one.
+
+Run such an instance under an overridden `HOME`, so the default-directory
+fallback lands inside the sandbox rather than in someone's library. Isolated
+`HOME` + `-no-remote` + an explicit `-profile` + a non-default port works, and
+lets a probe run beside an ordinary Zotero without contending for the port.
+
 Two traps follow from that:
 
 - `profiles.ini` marks one profile `Default=1`, and a bare `zotero` opens it. That
