@@ -291,6 +291,7 @@ snapshots). General resource writes belong on the official API write contract.
   `targets` array exposes those IDs for editable libraries/collections. Local
   API collection keys are not sufficient for `updateSession`.
 - **RIS / BibTeX / CSL file** → `POST /connector/import` (no local parsing).
+  Observed contract below.
 - **Identifier (DOI/arXiv/PMID/ISBN)** → resolve identifier to item JSON, then
   `POST /connector/saveItems`. The connector does *not* resolve identifiers for
   you headlessly; pyzot supplied its own resolvers.
@@ -301,6 +302,90 @@ snapshots). General resource writes belong on the official API write contract.
   pre-existing item, or assigning an arbitrary existing item to a collection,
   was handled in pyzot with direct SQLite writes. zotgo rejects that path; these
   capabilities are out of scope unless Zotero exposes an API for them.
+
+### Import contract (verified live 2026-09-11, Zotero 10.0.1, schema 44)
+
+The bullet above — "`POST /connector/import` (no local parsing)" — was mined from
+pyzot and was the whole of what we knew. Everything in this subsection was
+**observed** by driving the endpoint against a running Zotero.
+
+```
+POST /connector/import?session=<unique-id>
+Content-Type: application/x-bibtex
+<the bibliography file as the raw request body>
+```
+
+**`session` is a query parameter, and it is not `sessionID`.** Every other
+connector flow threads a `sessionID` through the JSON body; import takes
+`?session=` on the query string, because its body is the file itself. A repeated
+or omitted value fails with **409** `{"error":"SESSION_EXISTS"}`, so generate a
+fresh id per call.
+
+**`Content-Type` must be present but need not be correct.** Omitting the header
+returns **HTTP 500**, not a 4xx. The value is not authoritative either: RIS sent
+as `text/plain` imported correctly, so Zotero sniffs the content. Send a
+plausible type; never rely on it being honoured.
+
+BibTeX, RIS and CSL-JSON all import.
+
+#### Status codes and response
+
+| Outcome | Status | Body |
+|---|---|---|
+| Items imported | `201` | JSON array of the created **top-level** items |
+| Parsed, nothing found | `201` | `[]` |
+| Input unparseable | `400` | **empty** |
+| `session` reused or missing | `409` | `{"error":"SESSION_EXISTS"}` |
+| `Content-Type` absent | `500` | empty |
+
+Three traps follow from that table:
+
+- **`201` does not mean anything was imported.** An empty file is a successful
+  import of zero items, so a caller that checks only the status reports success.
+- **A `400` carries no message at all.** There is nothing to relay; the caller
+  has to supply the entire explanation itself.
+- **The response under-reports what was created.** A six-entry `.bib` returned
+  six items and created **seven** — a BibTeX `note = {…}` field becomes a child
+  `note` item, which does not appear in the response array. Counting the array
+  is not counting the writes.
+
+Returned items carry `"version": 0`. That is not a usable object version and must
+not reach a DTO (see the endpoint-scoped versions rule in `AGENTS.md`).
+
+#### Duplicates are not detected
+
+Importing the identical file twice created a second complete set of items with
+new keys — no dedup, no precondition, and nothing in the response indicating a
+match. Any safety here has to be zotgo's own, as it already is for
+`attachment import`.
+
+#### Target
+
+Created items come back carrying `collections: ["<key>"]` naming the collection
+selected in the GUI, so the save target is observable in the result as well as in
+advance through `getSelectedCollection`. Behaviour against a **non-editable
+target is untested** — the probe profile had no group libraries — so the
+redirect-to-My-Library claim in the section above remains source-derived rather
+than observed.
+
+#### Type mapping observed
+
+| BibTeX | Zotero | Carried through |
+|---|---|---|
+| `@article` | `journalArticle` | `DOI`, `publicationTitle`, `volume`, `issue`, `pages` |
+| `@inproceedings` | `conferencePaper` | `proceedingsTitle`, `place`, `pages` |
+| `@book` | `book` | `ISBN`, `edition`, `publisher` |
+| `@patent` | `patent` | `patentNumber`, `country`; creators become `inventor` |
+| `@techreport` | `report` | `institution`, `reportType` |
+| `@misc` | `document` | `howpublished` → `extra: "Published: …"` |
+
+Braced TeX accents decode correctly (`M{\"u}ller` → Müller, `Fern{\'a}ndez` →
+Fernández). A braced organisational author
+(`{Department of Mechanical Engineering}`) stays a single-field creator rather
+than being split into first/last.
+
+No publisher network I/O was observed for this fixture — nothing was fetched and
+no attachments were created. That is one fixture, not a guarantee.
 
 ---
 
