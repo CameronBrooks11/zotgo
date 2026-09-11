@@ -72,7 +72,7 @@ func TestPipedYesRequiresLease(t *testing.T) {
 func TestGrantRefusesNonInteractive(t *testing.T) {
 	t.Setenv("ZOTGO_CONFIG_DIR", t.TempDir())
 	withNonTTYStdin(t)
-	_, _, err := runCLI("http://127.0.0.1:0", "grant", "--ttl", "10m")
+	_, _, err := runCLI("http://127.0.0.1:0", "grant", "--library", "me", "--ttl", "10m")
 	if err == nil || !strings.Contains(err.Error(), "interactive terminal") {
 		t.Fatalf("err = %v, want an interactive-terminal refusal", err)
 	}
@@ -290,5 +290,32 @@ func TestConfirmLongLease(t *testing.T) {
 				t.Errorf("prompt did not name the end date:\n%s", buf.String())
 			}
 		})
+	}
+}
+
+// A lease's library is never inferred. Defaulting to My Library means a bare
+// `zot grant`, typed after a session spent in a group library, silently
+// authorizes writes across the largest library on the account (#114).
+func TestGrantRequiresExplicitLibrary(t *testing.T) {
+	t.Setenv("ZOTGO_CONFIG_DIR", t.TempDir())
+	t.Setenv("ZOTGO_LIBRARY", "")
+	withNonTTYStdin(t)
+
+	_, _, err := runCLI("http://127.0.0.1:0", "grant", "--ttl", "10m")
+	if err == nil || !strings.Contains(err.Error(), "requires an explicit library") {
+		t.Fatalf("err = %v, want a refusal naming the missing library", err)
+	}
+}
+
+// ZOTGO_LIBRARY is an explicit choice for the whole session, so it satisfies the
+// requirement — the grant then fails on the next gate, not on the library.
+func TestGrantAcceptsLibraryFromEnvironment(t *testing.T) {
+	t.Setenv("ZOTGO_CONFIG_DIR", t.TempDir())
+	t.Setenv("ZOTGO_LIBRARY", "me")
+	withNonTTYStdin(t)
+
+	_, _, err := runCLI("http://127.0.0.1:0", "grant", "--ttl", "10m")
+	if err == nil || strings.Contains(err.Error(), "requires an explicit library") {
+		t.Fatalf("err = %v, want the library requirement satisfied by ZOTGO_LIBRARY", err)
 	}
 }

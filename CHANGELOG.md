@@ -10,6 +10,17 @@ Planned and outstanding work is tracked in the
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking.** `zot grant` now requires an explicit library: pass `--library`
+  (`me`, a group name, or a group id) or set `ZOTGO_LIBRARY` for the session. A
+  bare `zot grant` previously defaulted to My Library, so the command combined
+  the three most expensive choices available — the largest library, the whole of
+  it, and every non-destructive operation — behind no arguments at all. Typed
+  after a session spent in a group library, it silently offered write authority
+  over a library the user was not working in. Every other command's My Library
+  default is self-correcting; a lease's is not.
+
 ## [0.12.0] - 2026-08-27
 
 One change, from a contributor report: the write-lease ceiling sat below the
