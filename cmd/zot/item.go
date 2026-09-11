@@ -43,6 +43,10 @@ func itemCreateCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "create",
 		Usage: "create items from JSON (a single object or an array) on stdin or --file",
+		Description: "Creates one item per JSON object. Children are never carried: attachments and\n" +
+			"notes hanging off a source item are not copied, and the result does not say so —\n" +
+			"the new item simply has numChildren 0. When copying an item, check the source's\n" +
+			"numChildren first and re-attach files with `zot attachment import`.",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "file", Aliases: []string{"f"}, Usage: "read item JSON from this file instead of stdin"},
 			&cli.BoolFlag{Name: "dry-run", Usage: "show what would be created without writing"},
