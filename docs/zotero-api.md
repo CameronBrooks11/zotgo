@@ -305,6 +305,11 @@ snapshots). General resource writes belong on the official API write contract.
 
 ### Import contract (verified live 2026-09-11, Zotero 10.0.1, schema 44)
 
+Re-probed on **Zotero 10.0.2** (2026-09-11): the `session` parameter, the 500 on a
+missing `Content-Type`, the silent duplicate creation, and the response undercount
+are all unchanged. The remaining details below were recorded on 10.0.1 and were not
+re-checked.
+
 The bullet above — "`POST /connector/import` (no local parsing)" — was mined from
 pyzot and was the whole of what we knew. Everything in this subsection was
 **observed** by driving the endpoint against a running Zotero.
