@@ -46,8 +46,9 @@ func (c *Client) LibraryFileAccess(ctx context.Context) ([]LibraryFiles, error) 
 	}
 
 	// The targets tree lists every library root and its collections; a library
-	// root's id is "L<libraryID>", a collection's is its item key. Only the
-	// library roots carry the account-wide file-access answer.
+	// root's id is "L<libraryID>", a collection's is "C<collectionID>" — a
+	// Zotero tree id, not the Local API item key. Only the library roots carry
+	// the account-wide file-access answer.
 	var payload struct {
 		Targets []struct {
 			ID            string `json:"id"`
