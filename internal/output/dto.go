@@ -31,6 +31,13 @@ type Library struct {
 // survive. `--raw` still carries Zotero's own version, unversioned and
 // explicitly outside this contract. A properly endpoint-scoped version returns
 // when writes do.
+//
+// This is a read contract, not a write schema: the field names here are chosen to
+// be stable and legible, and they deliberately differ from the vocabulary Zotero
+// validates a write against (`type` vs `itemType`, `parentKey` vs `parentItem`,
+// and the derived fields no write accepts). Do not make it round-trip into the
+// write commands — that would make every field added here a write-path question.
+// `--raw` is the round-trippable form, because it is Zotero's own object.
 type Item struct {
 	Key string `json:"key"`
 	// Type is Zotero's itemType, e.g. "journalArticle".
