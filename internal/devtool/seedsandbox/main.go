@@ -85,7 +85,7 @@ func run() error {
 	logPath := filepath.Join(box.root, "zotero.log")
 	var process *exec.Cmd
 	if box.alreadyServing() {
-		fmt.Println("A sandbox Zotero is already serving this port; reusing it.")
+		fmt.Println("Something is already serving this port; checking whether it is this sandbox…")
 	} else {
 		if process, err = box.launch(logPath); err != nil {
 			return err
@@ -187,12 +187,33 @@ func waitForZotero(ctx context.Context, baseURL string) error {
 	return errors.New("Zotero did not answer on the sandbox port within 90s")
 }
 
-// assertIsolated confirms the running Zotero opened the sandbox's data directory
-// and not some other library. It resolves an attachment's path when there is one;
-// on an empty corpus there is nothing to resolve yet, and the check is deferred
-// rather than faked.
+// assertIsolated confirms that whatever is answering on the sandbox port is
+// really this sandbox, before a single item is written to it.
+//
+// Two checks, because either alone leaves a hole. The port is not proof of
+// identity: any Zotero will answer a ping on it, and reusing a running instance
+// means a stray --port could seed 120 items into somebody's library. And the
+// data-directory check cannot run on a library with no attachments to resolve.
+//
+// So: the library must be empty or already be this corpus, and — when there is a
+// file to resolve — it must resolve inside the sandbox.
 func assertIsolated(ctx context.Context, box *sandbox) error {
 	c := zotero.New(box.baseURL())
+
+	items, err := c.AllItems(ctx, zotero.UserLibrary(), zotero.ItemsOptions{Top: true, Limit: 5})
+	if err != nil {
+		return fmt.Errorf("cannot read the library on %s to confirm it is the sandbox: %w", box.baseURL(), err)
+	}
+	if len(items) > 0 {
+		tagged, err := c.AllItems(ctx, zotero.UserLibrary(), zotero.ItemsOptions{Tags: []string{corpusMarker}, Top: true, Limit: 1})
+		if err != nil {
+			return fmt.Errorf("cannot confirm the library on %s is the sandbox: %w", box.baseURL(), err)
+		}
+		if len(tagged) == 0 {
+			return fmt.Errorf("ABORT: something is already serving %s with a library that is not this corpus — refusing to seed into it", box.baseURL())
+		}
+	}
+
 	attachments, err := c.AllItems(ctx, zotero.UserLibrary(), zotero.ItemsOptions{ItemType: "attachment", Limit: 1})
 	if err != nil || len(attachments) == 0 {
 		return nil
