@@ -10,6 +10,21 @@ Planned and outstanding work is tracked in the
 
 ## [Unreleased]
 
+## [1.0.0-rc.1] - 2026-09-11
+
+The first release candidate. Nothing new is added; what changed is that the
+schema-3 output contract has now been used on real work rather than only tested,
+and the two defects that surfaced are fixed.
+
+Both are safety defaults on `zot grant`, and both are **breaking**. They come
+from the same discovery: a lease is authority granted once and spent later, by
+something that is not watching, so a default that is merely convenient for every
+other command is not good enough here.
+
+The rc period is the wider version of that exercise. Schema 3 is intended to
+freeze at 1.0, so the useful thing to report is any field name you would not want
+to script against for a year — additions stay cheap after 1.0, renames do not.
+
 ### Changed
 
 - **Breaking.** `item.replace` is no longer in the default `zot grant` scope and
@@ -28,6 +43,37 @@ Planned and outstanding work is tracked in the
   after a session spent in a group library, it silently offered write authority
   over a library the user was not working in. Every other command's My Library
   default is self-correcting; a lease's is not.
+
+### Fixed
+
+- `creatorSummary` no longer carries Unicode directional isolates into `--json`
+  output. Zotero wraps each name in a multi-creator summary with U+2068/U+2069,
+  which render as nothing in a terminal and reach a script as unseen control
+  characters — so a string comparison against `"Lee and Baranowski"` failed for
+  a reason that was invisible on screen. Confirmed identical on Zotero 7.0 and
+  10.0.2. `--raw` still passes them through. Thanks to @ump45nose.
+
+- `--file -` now reads stdin on `item create`, `item patch` and `item replace`,
+  rather than being treated as a filename. A pipeline written the conventional
+  way failed with `open -: no such file or directory`, which sends the reader
+  looking for a missing file instead of at the flag. Thanks to @team-humaki.
+
+### Documentation
+
+- `zot item create` now states in `--help` that children are never carried:
+  attachments and notes on a source item are not copied and the result does not
+  say so. Composing a cross-library copy out of `show` and `create` produced a
+  correct metadata record and left the files behind, with `numChildren: 0` the
+  only sign.
+
+- `docs/machine-output.md` records that the `--json` DTO is a **read contract,
+  not a write schema** — it does not feed the write commands, and `--raw` is the
+  round-trippable form.
+
+- `docs/zotero-api.md` records the observed `/connector/import` contract, and
+  `AGENTS.md` the version floor (reads and connector ingestion work on Zotero
+  7.0; writes need a build with the local write API) and how to isolate a test
+  instance.
 
 ## [0.12.0] - 2026-08-27
 
@@ -324,7 +370,8 @@ contract before scripts could depend on it.
   `collections`, `stats`. Zero-dependency static binary and a goreleaser release
   pipeline.
 
-[Unreleased]: https://github.com/CameronBrooks11/zotgo/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/CameronBrooks11/zotgo/compare/v1.0.0-rc.1...HEAD
+[1.0.0-rc.1]: https://github.com/CameronBrooks11/zotgo/compare/v0.12.0...v1.0.0-rc.1
 [0.12.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/CameronBrooks11/zotgo/compare/v0.9.0...v0.10.0
