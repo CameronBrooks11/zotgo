@@ -148,19 +148,27 @@ Confirmed against a real 1093-item library by forcing `limit=1` over an
 
 ### `/children` omits annotations unless you ask for them
 
-**Verified live 2026-09-11, Zotero 10.0.2 (schema 44).** An unfiltered
-`/items/:key/children` on an attachment returns its notes and attachments but
-**not** its annotations. They appear only with an explicit `itemType` filter:
+**Verified live 2026-09-12, Zotero 10.0.2 (schema 44).** An unfiltered
+`/items/:key/children` **never includes annotations**. They appear only with an
+explicit `itemType` filter.
+
+Annotations hang off an *attachment*, not off the item, so seeing this takes two
+levels. For a journal article with two attachments, one of them annotated:
 
 ```
-GET /items/RDX4SEPK/children                      -> 0 items
-GET /items/RDX4SEPK/children?itemType=annotation  -> 3 items
+GET /items/24PYAE9Q/children                      -> 2 items (both attachments)
+GET /items/P2XTLVZU/children                      -> 0 items
+GET /items/P2XTLVZU/children?itemType=annotation  -> 1 item
 ```
 
-All three annotations existed, belonged to that attachment, and returned 200
-individually. `AllRawAnnotations` in `internal/zotero/annotation.go` already
-passes `ItemType: "annotation"` and is therefore correct; the risk is any *new*
-caller that enumerates children generically and assumes it has seen everything.
+Walking the item gives you two attachments and **no indication that either
+carries an annotation**. The annotation exists, belongs to that attachment, and
+returns 200 when fetched directly — it is absent only from the unfiltered
+listing.
+
+`AllRawAnnotations` in `internal/zotero/annotation.go` already passes
+`ItemType: "annotation"` and is therefore correct; the risk is any *new* caller
+that enumerates children generically and assumes it has seen everything.
 
 This matters most for anything that copies or mirrors an item: enumerate children
 unfiltered and every annotation is silently dropped, with the result looking
