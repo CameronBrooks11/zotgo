@@ -142,10 +142,15 @@ func run() error {
 	}
 
 	fmt.Printf("\nRun the live suite against it:\n\n    ZOTGO_BASE_URL=%s", box.baseURL())
-	if key != "" {
-		// A throwaway credential for a throwaway library, printed because the write
-		// tests would otherwise block on a modal nobody is there to click. It
-		// authorizes nothing outside this sandbox.
+	switch {
+	case key == "":
+	case os.Getenv("CI") != "":
+		// The key is a throwaway for a library destroyed with the runner, so it
+		// authorizes nothing — but CI logs are public, and a credential in one
+		// invites a report somebody then has to answer. The path is printed
+		// instead, which is enough to find it and is not itself a secret.
+		fmt.Printf(" \\\n    ZOTGO_LOCAL_KEY=$(read it from %s)", filepath.Join(box.profile, "localAPIKeys.json"))
+	default:
 		fmt.Printf(" \\\n    ZOTGO_LOCAL_KEY=%s", key)
 	}
 	fmt.Printf(" \\\n    just test-live\n")
