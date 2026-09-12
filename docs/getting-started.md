@@ -7,10 +7,16 @@ offline/SQLite mode by design — reaching into an application's database is the
 architecture it exists to avoid. Reads go through Zotero's **Local API**, which
 is off by default; `zot doctor` checks for it and tells you how to turn it on.
 
-Reads and connector ingestion work on Zotero 7.0 and up. The **write** commands
-additionally need a build carrying Zotero's local write API; on a build without
-it `zot doctor` shows `write` as unsupported and `zot grant` refuses with that
-reason, so the limitation surfaces before you rely on it.
+Reads and connector ingestion work on **Zotero 7.0 and up**. The **write**
+commands need **Zotero 10.0 or newer**: the local write API arrived in 10.0, and
+7, 8 and 9 do not have it in any form. On an older build `zot doctor` shows
+`write` as unsupported and `zot grant` refuses with that reason, so the
+limitation surfaces before you rely on it rather than partway through a write.
+
+| Zotero | reads, export, connector ingestion | writes |
+| --- | --- | --- |
+| 7.0 – 9.x | yes | no |
+| 10.0+ | yes | yes |
 
 ## Install
 

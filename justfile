@@ -47,6 +47,54 @@ check: fmt-check lint staticcheck spell
 # The local pre-commit gate the git hook runs (see .githooks/pre-commit)
 pre-commit: check test
 
+# Download one pinned Zotero release into ./bin/zotero-<version>/ and echo the
+# path to its executable. The archive format changes mid-range — 7.x ships
+# .tar.bz2 and 8.0 onward ship .tar.xz — so both are tried rather than assumed.
+# Versions are pinned deliberately: a floating "latest" turns an unrelated
+# upstream release into a red build on somebody's PR.
+_zotero version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dest="{{justfile_directory()}}/bin/zotero-{{version}}"
+    if [ -x "$dest/zotero" ]; then echo "$dest/zotero"; exit 0; fi
+    mkdir -p "$dest"
+    base="https://download.zotero.org/client/release/{{version}}/Zotero-{{version}}_linux-x86_64"
+    for ext in tar.xz tar.bz2; do
+      if curl -fsL -o "$dest/archive.$ext" "$base.$ext" 2>/dev/null; then
+        tar xf "$dest/archive.$ext" -C "$dest" --strip-components=1
+        rm -f "$dest/archive.$ext"
+        echo "$dest/zotero"; exit 0
+      fi
+    done
+    echo "no Linux build published for Zotero {{version}}" >&2; exit 1
+
+# Seed a sandbox on one pinned Zotero version and run the live suite against it.
+# Headless: Zotero has no headless mode, so it runs under a virtual display.
+#
+# Reads work from 7.0; the local write API arrived in 10.0, so the write tests
+# report as unsupported below that rather than failing.
+
+# Seed and run the live suite against one pinned Zotero version, headless
+test-live-version version port="23180":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    binary="$(just _zotero {{version}})"
+    sandbox="${TMPDIR:-/tmp}/zotgo-matrix-{{version}}"
+    rm -rf "$sandbox"
+    # Zotero has to stay up for the tests, so the seeder cannot stop it — this
+    # does, on every exit path. CI would not care; a developer running the matrix
+    # locally would end up with four stray Zoteros.
+    trap 'pkill -f "profile $sandbox" 2>/dev/null || true' EXIT
+    xvfb-run -a --server-args="-screen 0 1280x1024x24" bash -c '
+      set -euo pipefail
+      ZOTERO_BIN="'"$binary"'" go run ./internal/devtool/seedsandbox \
+        --unattended --wipe --port {{port}} --dir "'"$sandbox"'"
+      key=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))[\"keys\"][0][\"key\"])" \
+        "'"$sandbox"'/.zotero/zotero/sandbox/localAPIKeys.json" 2>/dev/null || true)
+      ZOTGO_BASE_URL=http://127.0.0.1:{{port}} ZOTGO_LOCAL_KEY="$key" \
+        go test -tags live -count=1 ./internal/... -run TestLive
+    '
+
 # A throwaway Zotero gets its own HOME, profile, data directory and port, so the
 # live suite never runs against a real library. --wipe rebuilds from nothing.
 # --unattended pre-registers an API key instead of waiting for Zotero's
