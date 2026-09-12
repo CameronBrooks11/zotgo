@@ -62,7 +62,7 @@ func itemCreateAction(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	file := cmd.String("file")
-	fromStdin := file == ""
+	fromStdin := file == "" || file == "-"
 	raw, err := readItemInput(file)
 	if err != nil {
 		return err
@@ -142,7 +142,7 @@ func itemCreateAction(ctx context.Context, cmd *cli.Command) error {
 // With no file and an interactive terminal there is nothing to read, so it fails
 // with guidance rather than blocking silently on os.Stdin.
 func readItemInput(file string) ([]byte, error) {
-	if file != "" {
+	if file != "" && file != "-" {
 		return os.ReadFile(file)
 	}
 	if isTerminal(os.Stdin) {
@@ -541,7 +541,7 @@ func itemPatchAction(ctx context.Context, cmd *cli.Command) error {
 		return errors.New("missing item key (usage: zot item patch <item-key>)")
 	}
 	file := cmd.String("file")
-	fromStdin := file == ""
+	fromStdin := file == "" || file == "-"
 	raw, err := readItemInput(file)
 	if err != nil {
 		return err
@@ -641,7 +641,7 @@ func itemReplaceAction(ctx context.Context, cmd *cli.Command) error {
 		return errors.New("missing item key (usage: zot item replace <item-key>)")
 	}
 	file := cmd.String("file")
-	fromStdin := file == ""
+	fromStdin := file == "" || file == "-"
 	raw, err := readItemInput(file)
 	if err != nil {
 		return err
