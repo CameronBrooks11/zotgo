@@ -44,6 +44,8 @@ const (
 	KindCollectionMutation  Kind = "collection-mutation"
 	KindCollectionMutations Kind = "collection-mutations"
 	KindTagMutation         Kind = "tag-mutation"
+	KindItemCopy            Kind = "item-copy"
+	KindItemCopies          Kind = "item-copies"
 	KindTagMutations        Kind = "tag-mutations"
 )
 

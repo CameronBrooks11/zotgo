@@ -21,6 +21,11 @@ const (
 	// OpAttachmentImport is reserved for the managed-file upload command (#52),
 	// which conforms to the write-lease model once it lands.
 	OpAttachmentImport Operation = "attachment.import"
+	// OpItemCopy covers `zot item copy` in full — the item, its notes and
+	// attachments, the bytes of any managed file, and the annotations on those
+	// attachments. One token per command, so a lease authorizes the operation the
+	// user asked for rather than the several primitives it decomposes into.
+	OpItemCopy Operation = "item.copy"
 )
 
 // WriteAuthorizer decides whether one write may proceed. It is consulted at the

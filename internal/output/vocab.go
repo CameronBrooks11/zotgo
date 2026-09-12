@@ -31,6 +31,10 @@ const (
 	StatusDeleted  Status = "deleted"
 
 	// Attachment-import outcomes (in addition to planned/failed):
+	// StatusSkipped means the object was deliberately not acted on — excluded by
+	// a flag, or carrying nothing to act on. Distinct from unchanged, which is a
+	// write that turned out to be a no-op.
+	StatusSkipped   Status = "skipped"
 	StatusDuplicate Status = "duplicate"
 	StatusImported  Status = "imported"
 	StatusPartial   Status = "partial"
@@ -49,6 +53,7 @@ const (
 	OpMove    Operation = "move"
 	OpAdd     Operation = "add"
 	OpRemove  Operation = "remove"
+	OpCopy    Operation = "copy"
 )
 
 // FailureCode is the stable, documented reason a write failed. The batch-mutation
