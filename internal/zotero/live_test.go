@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -290,4 +291,68 @@ func TestLiveNotFound(t *testing.T) {
 	if _, err := c.Item(context.Background(), UserLibrary(), "ZZZZZZZZ"); err != ErrNotFound {
 		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
+}
+
+// AttachmentLocalPath is the first implementation of CapabilityLocalFileAccess,
+// which doctor has advertised since before anything consumed it. The contract it
+// depends on cannot be checked by a fake: Zotero answers /file/view/url with a
+// text/plain file:// URL whose exact encoding — percent-escaped spaces, an
+// absolute path, no host — is Zotero's choice, not ours.
+//
+// The test also asserts the file is really there. A path that parses but does not
+// exist would satisfy the decoder and fail every caller.
+func TestLiveAttachmentLocalPath(t *testing.T) {
+	c := liveClient(t)
+	ctx := context.Background()
+	lib := UserLibrary()
+
+	attachments, _, err := c.Items(ctx, lib, ItemsOptions{ItemType: "attachment", Limit: 25})
+	if err != nil {
+		t.Fatalf("Items: %v", err)
+	}
+
+	// A handful is enough to establish the contract; every attachment costs two
+	// more requests and this runs against a real application.
+	const maxChecked = 3
+
+	var checked int
+	for _, envelope := range attachments {
+		if checked >= maxChecked {
+			break
+		}
+		attachment, err := c.Attachment(ctx, lib, envelope.Key)
+		if err != nil {
+			t.Fatalf("Attachment %s: %v", envelope.Key, err)
+		}
+		managed, err := ManagedAttachmentLinkMode(attachment.LinkMode)
+		if err != nil {
+			t.Fatalf("attachment %s: %v", envelope.Key, err)
+		}
+		if !managed || attachment.Enclosure == nil {
+			continue
+		}
+
+		path, err := c.AttachmentLocalPath(ctx, lib, envelope.Key)
+		if err != nil {
+			t.Errorf("AttachmentLocalPath(%s): %v", envelope.Key, err)
+			continue
+		}
+		if !filepath.IsAbs(path) {
+			t.Errorf("attachment %s: path %q is not absolute", envelope.Key, path)
+		}
+		info, statErr := os.Stat(path)
+		if statErr != nil {
+			t.Errorf("attachment %s: resolved %q but cannot stat it: %v", envelope.Key, path, statErr)
+			continue
+		}
+		if info.IsDir() {
+			t.Errorf("attachment %s: resolved %q, which is a directory", envelope.Key, path)
+		}
+		checked++
+	}
+
+	if checked == 0 {
+		t.Skip("no managed attachment with an advertised file in this library; seed one to exercise local file access")
+	}
+	t.Logf("resolved and stat'd %d managed attachment(s)", checked)
 }
