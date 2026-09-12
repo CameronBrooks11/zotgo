@@ -80,7 +80,7 @@ Item routes exist under **both** `/api/users/:userID/…` and `/api/groups/:grou
 /api/users/:userID/items/trash                trashed
 /api/users/:userID/items/tags                 tags in item set
 /api/users/:userID/items/:itemKey             one item
-/api/users/:userID/items/:itemKey/children    attachments + notes + annotations
+/api/users/:userID/items/:itemKey/children    attachments + notes (NOT annotations — see below)
 /api/users/:userID/items/:itemKey/file        302 redirect to the local file URL
 /api/users/:userID/items/:itemKey/file/view/url  local file URL
 /api/users/:userID/items/:itemKey/fulltext    full-text content (per item)
@@ -145,6 +145,27 @@ Confirmed against a real 1093-item library by forcing `limit=1` over an
 - Zotero's CSV translator **skips standalone attachments**: a library with 1093
   top-level items (19 of them standalone attachments) exports 1074 CSV rows.
   That omission is Zotero's, not a merge defect.
+
+### `/children` omits annotations unless you ask for them
+
+**Verified live 2026-09-11, Zotero 10.0.2 (schema 44).** An unfiltered
+`/items/:key/children` on an attachment returns its notes and attachments but
+**not** its annotations. They appear only with an explicit `itemType` filter:
+
+```
+GET /items/RDX4SEPK/children                      -> 0 items
+GET /items/RDX4SEPK/children?itemType=annotation  -> 3 items
+```
+
+All three annotations existed, belonged to that attachment, and returned 200
+individually. `AllRawAnnotations` in `internal/zotero/annotation.go` already
+passes `ItemType: "annotation"` and is therefore correct; the risk is any *new*
+caller that enumerates children generically and assumes it has seen everything.
+
+This matters most for anything that copies or mirrors an item: enumerate children
+unfiltered and every annotation is silently dropped, with the result looking
+complete. Ask for annotations explicitly, or state plainly that they are not
+carried.
 
 ### The `/file` endpoint = a storage-path simplification, not byte streaming
 
