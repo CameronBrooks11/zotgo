@@ -80,7 +80,7 @@ Item routes exist under **both** `/api/users/:userID/…` and `/api/groups/:grou
 /api/users/:userID/items/trash                trashed
 /api/users/:userID/items/tags                 tags in item set
 /api/users/:userID/items/:itemKey             one item
-/api/users/:userID/items/:itemKey/children    attachments + notes + annotations
+/api/users/:userID/items/:itemKey/children    attachments + notes (NOT annotations — see below)
 /api/users/:userID/items/:itemKey/file        302 redirect to the local file URL
 /api/users/:userID/items/:itemKey/file/view/url  local file URL
 /api/users/:userID/items/:itemKey/fulltext    full-text content (per item)
@@ -145,6 +145,35 @@ Confirmed against a real 1093-item library by forcing `limit=1` over an
 - Zotero's CSV translator **skips standalone attachments**: a library with 1093
   top-level items (19 of them standalone attachments) exports 1074 CSV rows.
   That omission is Zotero's, not a merge defect.
+
+### `/children` omits annotations unless you ask for them
+
+**Verified live 2026-09-12, Zotero 10.0.2 (schema 44).** An unfiltered
+`/items/:key/children` **never includes annotations**. They appear only with an
+explicit `itemType` filter.
+
+Annotations hang off an *attachment*, not off the item, so seeing this takes two
+levels. For a journal article with two attachments, one of them annotated:
+
+```
+GET /items/24PYAE9Q/children                      -> 2 items (both attachments)
+GET /items/P2XTLVZU/children                      -> 0 items
+GET /items/P2XTLVZU/children?itemType=annotation  -> 1 item
+```
+
+Walking the item gives you two attachments and **no indication that either
+carries an annotation**. The annotation exists, belongs to that attachment, and
+returns 200 when fetched directly — it is absent only from the unfiltered
+listing.
+
+`AllRawAnnotations` in `internal/zotero/annotation.go` already passes
+`ItemType: "annotation"` and is therefore correct; the risk is any *new* caller
+that enumerates children generically and assumes it has seen everything.
+
+This matters most for anything that copies or mirrors an item: enumerate children
+unfiltered and every annotation is silently dropped, with the result looking
+complete. Ask for annotations explicitly, or state plainly that they are not
+carried.
 
 ### The `/file` endpoint = a storage-path simplification, not byte streaming
 
