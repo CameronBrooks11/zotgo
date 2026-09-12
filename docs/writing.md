@@ -92,6 +92,27 @@ Generic `item create` does not ingest local bytes. For a new `imported_file`
 item it rejects local `path` and premature `filename` fields and directs the user
 to `attachment import`; metadata-only creates produce a warning.
 
+**`item create` creates one item and never its children.** Attachments and notes
+hanging off a source item are not carried, and nothing in the result says so —
+the new item simply has `numChildren: 0`. This matters most when composing a
+copy out of `show` and `create`:
+
+```bash
+# Metadata only. The source's PDFs, snapshots and notes are NOT copied.
+zot show KEY --raw --library "<source>" \
+  | jq '.item.data | del(.key, .version, .relations) | .collections = ["<TARGET>"]' \
+  | zot item create --library "<target>" --yes
+```
+
+That produces a correct metadata record and leaves the files behind. Recovering
+them is a second pass: `zot attachment show` on each source child to locate the
+file, then `zot attachment import` against the newly created item. Check
+`numChildren` on the source first — if it is non-zero, plan for that second pass.
+
+Note the pipeline reads `.item.data` from `--raw`, not `.data` from `--json`:
+the DTO uses `type` where a write needs `itemType`, so the `--json` form does not
+round-trip (see the issue tracker).
+
 ## Collections
 
 ```bash

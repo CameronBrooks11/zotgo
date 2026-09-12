@@ -207,3 +207,18 @@ func TestHighCostHelpExplainsRouting(t *testing.T) {
 		})
 	}
 }
+
+// item create silently drops a source item's attachments and notes, which is the
+// dangerous half of the copy workaround (#116). Help is where a user looks before
+// composing a pipeline, so the limitation has to be stated there.
+func TestItemCreateHelpNamesTheChildrenLimit(t *testing.T) {
+	out, _, err := runCLI("http://127.0.0.1:0", "item", "create", "--help")
+	if err != nil {
+		t.Fatalf("item create --help: %v", err)
+	}
+	for _, want := range []string{"Children are never carried", "numChildren", "attachment import"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("item create --help missing %q\n%s", want, out)
+		}
+	}
+}
