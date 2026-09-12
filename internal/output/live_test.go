@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/CameronBrooks11/zotgo/internal/zotero"
@@ -157,8 +158,13 @@ func TestLiveItemDTOMapsMetaFields(t *testing.T) {
 		if meta.NumChildren != nil && dto.NumChildren != *meta.NumChildren {
 			t.Errorf("%s: numChildren = %d, want %d", e.Key, dto.NumChildren, *meta.NumChildren)
 		}
-		if meta.CreatorSummary != nil && dto.CreatorSummary != *meta.CreatorSummary {
-			t.Errorf("%s: creatorSummary = %q, want %q", e.Key, dto.CreatorSummary, *meta.CreatorSummary)
+		// The DTO deliberately differs from Zotero's raw value here: directional
+		// isolates are stripped so they never reach a machine-readable field. The
+		// comparison strips them independently rather than calling the client's
+		// helper, so it still catches any *other* divergence — a truncation, the
+		// wrong field, a dropped suffix.
+		if meta.CreatorSummary != nil && dto.CreatorSummary != withoutBidiIsolates(*meta.CreatorSummary) {
+			t.Errorf("%s: creatorSummary = %q, want %q", e.Key, dto.CreatorSummary, withoutBidiIsolates(*meta.CreatorSummary))
 		}
 		if meta.ParsedDate != nil && dto.ParsedDate != *meta.ParsedDate {
 			t.Errorf("%s: parsedDate = %q, want %q", e.Key, dto.ParsedDate, *meta.ParsedDate)
@@ -216,4 +222,16 @@ func TestLiveDTOSlicesMarshalAsArrays(t *testing.T) {
 			t.Fatalf("%s: a slice field marshalled as null: %s", e.Key, blob)
 		}
 	}
+}
+
+// withoutBidiIsolates drops U+2066-U+2069. Zotero wraps each name in a
+// multi-creator summary with them; they render invisibly and reach a script as
+// unseen control characters, so the DTO strips them.
+func withoutBidiIsolates(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 0x2066 && r <= 0x2069 {
+			return -1
+		}
+		return r
+	}, s)
 }
