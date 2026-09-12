@@ -931,3 +931,45 @@ func TestItemWriteWithStaleKeyStillFailsFastWithoutWriteCapability(t *testing.T)
 		t.Error("wrote on a read-only build even though a key was persisted")
 	}
 }
+
+
+func TestReadItemInput_StdinDash(t *testing.T) {
+	// Test 1: reading from actual file
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "test.json")
+	expected := []byte(`[{"itemType":"book","title":"Test Book"}]`)
+	if err := os.WriteFile(tmpFile, expected, 0600); err != nil {
+		t.Fatalf("failed to write temp file: %v", err)
+	}
+
+	data, err := readItemInput(tmpFile)
+	if err != nil {
+		t.Fatalf("readItemInput(file) unexpected err: %v", err)
+	}
+	if string(data) != string(expected) {
+		t.Fatalf("readItemInput(file) = %s, want %s", data, expected)
+	}
+
+	// Test 2: reading from stdin using "-"
+	oldStdin := os.Stdin
+	defer func() { os.Stdin = oldStdin }()
+
+	rPipe, wPipe, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe failed: %v", err)
+	}
+	os.Stdin = rPipe
+
+	go func() {
+		defer wPipe.Close()
+		_, _ = wPipe.Write(expected)
+	}()
+
+	dashData, err := readItemInput("-")
+	if err != nil {
+		t.Fatalf("readItemInput("-") unexpected err: %v", err)
+	}
+	if string(dashData) != string(expected) {
+		t.Fatalf("readItemInput("-") = %s, want %s", dashData, expected)
+	}
+}
