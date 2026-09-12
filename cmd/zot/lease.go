@@ -266,7 +266,7 @@ var writeOperations = []zotero.Operation{
 	zotero.OpItemCreate, zotero.OpItemPatch, zotero.OpItemReplace, zotero.OpItemDelete,
 	zotero.OpCollectionCreate, zotero.OpCollectionRename, zotero.OpCollectionMove, zotero.OpCollectionDelete,
 	zotero.OpTagAdd, zotero.OpTagRemove, zotero.OpTagDelete,
-	zotero.OpAttachmentImport,
+	zotero.OpAttachmentImport, zotero.OpItemCopy,
 }
 
 // destructiveOperations are the writes that can lose data; they are excluded from
