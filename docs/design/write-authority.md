@@ -446,8 +446,8 @@ operation that is not in `destructiveOperations`, where destructive means **can
 lose data**. Import only adds items, so that rule would admit it automatically.
 It should not, and the rule needs a second exclusion rather than a special case:
 
-- **destructive** — the write can lose data (`item.delete`, `collection.delete`,
-  `tag.delete`)
+- **destructive** — the write can lose data (`item.replace`, `item.delete`,
+  `collection.delete`, `tag.delete`; see [Q9](#q9-replace-is-destructive))
 - **nondeterministic target** — the write's destination is chosen outside the
   command (the `ingest.*` operations)
 
@@ -468,6 +468,32 @@ prediction problem above.
 The `ingest.bib` token enters the vocabulary when #99 lands, following the
 precedent `attachment.import` set in #52; the Q3 list above describes the
 vocabulary as it currently ships.
+
+### <a id="q9-replace-is-destructive"></a>Q9 — `item.replace` is **destructive**, and always was
+
+`item.replace` is withheld from the default grant. This is a correction to how the
+existing rule was applied, not a new category.
+
+The rule is *withhold what can lose data*. A full replace deletes no item, but it
+**resets every field the payload omits** — a caller that meant to change a title
+and sent an object without the abstract has destroyed the abstract, with no
+recovery short of sync history. That is data loss by the same definition
+`item.delete` is withheld under.
+
+Q3 had already said so, in the course of arguing for a per-command vocabulary:
+`item.replace` is "a destructive full overwrite, must be separable from `patch`".
+It was then placed in the default anyway, because `destructiveOperations` was
+populated from the commands whose *names* say delete. So the vocabulary and the
+default disagreed, and the default was the one that was wrong.
+
+The practical shape this took: a lease minted for a single `item.create` also
+carried the ability to overwrite any item in the library wholesale, from a command
+typed with no arguments.
+
+What the default still grants — `item.create`, `item.patch`, `collection.create`,
+`collection.rename`, `collection.move`, `tag.add`, `tag.remove`,
+`attachment.import` — is unchanged, and remains a usable middle ground. A default
+nobody can work with is not a safe default; it is one everybody overrides.
 
 ## Phased rollout
 

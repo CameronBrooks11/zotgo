@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -317,5 +318,30 @@ func TestGrantAcceptsLibraryFromEnvironment(t *testing.T) {
 	_, _, err := runCLI("http://127.0.0.1:0", "grant", "--ttl", "10m")
 	if err == nil || strings.Contains(err.Error(), "requires an explicit library") {
 		t.Fatalf("err = %v, want the library requirement satisfied by ZOTGO_LIBRARY", err)
+	}
+}
+
+// A full replace resets every field the payload omits, so it loses data by the
+// same definition the delete operations are withheld under — it must not be in
+// the scope a bare `zot grant` mints (#118).
+func TestDefaultGrantWithholdsDestructiveOperations(t *testing.T) {
+	ops := defaultGrantOperations()
+
+	for _, withheld := range []zotero.Operation{
+		zotero.OpItemReplace, zotero.OpItemDelete, zotero.OpCollectionDelete, zotero.OpTagDelete,
+	} {
+		if slices.Contains(ops, string(withheld)) {
+			t.Errorf("default grant includes %q; it can lose data and must be named explicitly", withheld)
+		}
+	}
+
+	// The default still has to be usable, or everyone reaches for --operations
+	// and the safe default stops being the one people take.
+	for _, granted := range []zotero.Operation{
+		zotero.OpItemCreate, zotero.OpItemPatch, zotero.OpTagAdd, zotero.OpAttachmentImport,
+	} {
+		if !slices.Contains(ops, string(granted)) {
+			t.Errorf("default grant is missing %q; it cannot lose data and should not need naming", granted)
+		}
 	}
 }

@@ -270,8 +270,15 @@ var writeOperations = []zotero.Operation{
 }
 
 // destructiveOperations are the writes that can lose data; they are excluded from
-// the default grant so an omitted --operations cannot authorize a deletion.
+// the default grant so an omitted --operations cannot authorize one.
+//
+// item.replace belongs here even though it deletes nothing: a full replace resets
+// every field the payload omits, so it loses data by the same definition the rest
+// of this set is chosen by. Q3 already names it "a destructive full overwrite,
+// must be separable from patch" — it was miscategorised against this rule rather
+// than an exception to it.
 var destructiveOperations = map[zotero.Operation]bool{
+	zotero.OpItemReplace:      true,
 	zotero.OpItemDelete:       true,
 	zotero.OpCollectionDelete: true,
 	zotero.OpTagDelete:        true,
@@ -279,8 +286,8 @@ var destructiveOperations = map[zotero.Operation]bool{
 
 // defaultGrantOperations is the scope when --operations is omitted: every
 // non-destructive write. It is a usable middle ground — it covers create, patch,
-// replace, tag add/remove, and attachment import — while withholding the delete
-// operations, which must be named explicitly.
+// tag add/remove, and attachment import — while withholding the writes that can
+// lose data, which must be named explicitly.
 func defaultGrantOperations() []string {
 	var ops []string
 	for _, op := range writeOperations {
