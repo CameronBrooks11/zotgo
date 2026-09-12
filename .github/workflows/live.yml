@@ -1,0 +1,86 @@
+# Runs the live suite against a real Zotero.
+#
+# Until this existed, 28 live tests had never run in CI even once: they need a
+# running Zotero, and Zotero is a desktop application. It turns out not to need a
+# desktop — it runs under a virtual display, and `just seed-sandbox` builds it an
+# isolated library to work on, so the whole thing is automatable.
+#
+# Two cadences, because they answer different questions. Every pull request runs
+# the current Zotero, which catches our regressions. The version matrix runs
+# weekly and catches Zotero's, which no pull request would.
+name: live
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, Monday 05:00 UTC. A Zotero release that breaks us is found within a
+    # week rather than by a user, without taxing every push with four downloads.
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The version everyone is actually running. Fast enough for every change.
+  current:
+    name: live (Zotero 10.0.2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: true
+      - uses: extractions/setup-just@v4
+      - name: Install a virtual display
+        # Zotero has no headless mode, so it needs an X server even with nothing
+        # to show. The GTK libraries are Zotero's own runtime dependencies.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb libgtk-3-0 libdbus-glib-1-2 libasound2t64
+      - run: just test-live-version 10.0.2 23180
+
+  # Boundaries, not coverage: the supported floor, the last build without the
+  # write API, the first build with it, and current.
+  matrix:
+    name: live (Zotero ${{ matrix.zotero }})
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The floor the README promises. Reads only — writes report as
+          # unsupported rather than failing, which is the documented contract.
+          - zotero: "7.0"
+            port: "23181"
+          # The last major without a local write API. Proves the read-only path is
+          # not accidentally specific to 7.0.
+          - zotero: "9.0"
+            port: "23182"
+          # The first build with writes, and the highest-value row: everything was
+          # developed against 10.0.2, so this is where a dependency on a later fix
+          # would surface.
+          - zotero: "10.0"
+            port: "23183"
+          - zotero: "10.0.2"
+            port: "23184"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: true
+      - uses: extractions/setup-just@v4
+      - name: Install a virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb libgtk-3-0 libdbus-glib-1-2 libasound2t64
+      - run: just test-live-version ${{ matrix.zotero }} ${{ matrix.port }}

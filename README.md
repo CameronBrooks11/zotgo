@@ -23,8 +23,9 @@ Or grab a prebuilt binary from the [Releases] page — no runtime, no dependenci
 The Zotero 7+ desktop app must be **running** with its Local API enabled;
 `zot doctor` checks and, if needed, prints the steps to turn it on.
 
-Reads and connector ingestion work on Zotero 7.0 and up. The **write** commands
-need a build carrying Zotero's local write API, which older releases do not have;
+Reads and connector ingestion work on **Zotero 7.0 and up**. The **write**
+commands need **Zotero 10.0 or newer** — 7, 8 and 9 have no local write API at
+all, so leases, `item` writes and `attachment import` are unavailable there.
 `zot doctor` reports that as a capability rather than failing obscurely.
 
 ```bash
