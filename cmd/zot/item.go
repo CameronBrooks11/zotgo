@@ -28,6 +28,7 @@ func itemCommand() *cli.Command {
 			"`item list`, `item show`, and `item search` mirror the top-level read commands.",
 		Commands: []*cli.Command{
 			itemCreateCommand(),
+			itemCopyCommand(),
 			itemPatchCommand(),
 			itemReplaceCommand(),
 			itemDeleteCommand(),
