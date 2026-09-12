@@ -47,6 +47,17 @@ check: fmt-check lint staticcheck spell
 # The local pre-commit gate the git hook runs (see .githooks/pre-commit)
 pre-commit: check test
 
+# A throwaway Zotero gets its own HOME, profile, data directory and port, so the
+# live suite never runs against a real library. --wipe rebuilds from nothing.
+# --unattended pre-registers an API key instead of waiting for Zotero's
+# authorization modal, and is for CI, which cannot click one.
+#
+# (The blank line matters: just takes only the comments touching the recipe.)
+
+# Build and seed a throwaway Zotero to develop and test against
+seed-sandbox *args:
+    go run ./internal/devtool/seedsandbox {{args}}
+
 # Run the test suite
 test:
     go test ./...

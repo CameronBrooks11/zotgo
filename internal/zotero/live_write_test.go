@@ -56,13 +56,21 @@ func TestLiveWriteRoundTrip(t *testing.T) {
 	c, lib := liveWriteClient(t)
 	ctx := context.Background()
 
-	t.Log("Authorizing — click **Always Allow** in Zotero's prompt…")
-	remember, err := c.Authorize(ctx, "zotgo live write test")
-	if err != nil {
-		t.Fatalf("Authorize: %v", err)
-	}
-	if !remember {
-		t.Fatal("got a single-use key (you clicked \"Allow\"); this round-trip needs a persistent key — re-run and click \"Always Allow\"")
+	// A seeded sandbox already holds a remembered key, and Authorize would block
+	// on a modal nobody is there to click — which is the difference between this
+	// suite running unattended and not running at all.
+	if key := os.Getenv("ZOTGO_LOCAL_KEY"); key != "" {
+		t.Log("Using ZOTGO_LOCAL_KEY; not prompting for authorization")
+		c.SetLocalKey(key)
+	} else {
+		t.Log("Authorizing — click **Always Allow** in Zotero's prompt…")
+		remember, err := c.Authorize(ctx, "zotgo live write test")
+		if err != nil {
+			t.Fatalf("Authorize: %v", err)
+		}
+		if !remember {
+			t.Fatal("got a single-use key (you clicked \"Allow\"); this round-trip needs a persistent key — re-run and click \"Always Allow\"")
+		}
 	}
 
 	// Create.

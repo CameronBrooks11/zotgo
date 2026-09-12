@@ -146,6 +146,31 @@ Confirmed against a real 1093-item library by forcing `limit=1` over an
   top-level items (19 of them standalone attachments) exports 1074 CSV rows.
   That omission is Zotero's, not a merge defect.
 
+### Annotation writes are field-order sensitive
+
+**Verified live 2026-09-12, Zotero 10.0.2 (schema 44).** Creating an annotation
+requires `annotationType` to arrive **before** the other `annotation*` fields.
+Anything else first is rejected:
+
+```
+400 annotationType must be set before other annotation properties
+```
+
+This is a trap for Go in particular: `encoding/json` sorts map keys, and
+`annotationType` sorts *after* `annotationColor`, `annotationComment`,
+`annotationPageLabel`, `annotationPosition` and `annotationSortIndex`. A
+`map[string]any` payload therefore **always** fails, while a struct — which
+encodes in declaration order — always works. The ordering is a property of the
+type, so encode annotations from a struct.
+
+`annotationPosition` is also required. Omitting it fails a NOT NULL constraint in
+Zotero's own schema, and the error arrives as raw SQL including the statement and
+its bound parameters — which is not something to relay to a user.
+
+Both facts were found by seeding a corpus, not by reading: the first attempt
+reported creating two annotations and created none, because a batch write reports
+per-object rejections *inside* a 200 response rather than as an error.
+
 ### `/children` omits annotations unless you ask for them
 
 **Verified live 2026-09-12, Zotero 10.0.2 (schema 44).** An unfiltered

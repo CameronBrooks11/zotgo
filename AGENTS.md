@@ -74,6 +74,44 @@ when `ZOTGO_LIVE_ANNOTATED_ATTACHMENT` names an attachment (PDF/EPUB) carrying a
 least a highlight and a note with distinct sort indexes; unset, it discovers or
 skips. Sync that attachment so the `--web` variant sees the same key.
 
+### `just seed-sandbox`
+
+Builds the throwaway Zotero for you, so none of the above has to be done by hand:
+
+```sh
+just seed-sandbox              # build it, seed it, leave it running
+just seed-sandbox --wipe       # rebuild from nothing
+just seed-sandbox --unattended # no authorization modal; for CI
+```
+
+It creates an isolated `HOME` with its own profile, data directory and port,
+starts Zotero there, and seeds a known corpus: 120 bibliographic items across
+eight types, non-ASCII and braced-TeX creators, a three-level collection tree, a
+PDF attachment with real bytes, two annotations covering both bodies, and related
+items. It prints the `ZOTGO_BASE_URL` (and, unattended, the `ZOTGO_LOCAL_KEY`) to
+run the live suite against.
+
+Re-running is safe: it detects an already-seeded corpus and an already-running
+sandbox rather than doubling either.
+
+**It opens a Zotero window.** Zotero has no headless mode, so seeding is visible
+on whatever desktop runs it — items will appear in a window as they import.
+
+**Authorization has two paths, and the default is the honest one.** By default the
+tool asks Zotero for a key through `POST /api/local/authorize` exactly as any
+client would, and you approve the modal once. `--unattended` instead writes a
+remembered key into the profile it just created. That is the one place anything
+here reaches into Zotero's own state, and it is deliberate and narrow — the file
+belongs to a profile the tool made moments earlier, it is written once and never
+read back, and no database is touched. It exists because CI cannot click a modal,
+and without it a version matrix is not possible at all. Prefer the default
+anywhere a human is present.
+
+**What it cannot cover.** Nine live tests still skip against it: eight need a real
+`ZOTGO_API_KEY` for the Web API, and one needs a group library. Groups and web
+accounts are zotero.org concepts and cannot be created locally. Everything else —
+18 tests including the write round-trip — runs unattended.
+
 ### Use a throwaway profile
 
 The live suite and any hand-run probing write to whatever library the Local API
