@@ -931,3 +931,67 @@ func TestItemWriteWithStaleKeyStillFailsFastWithoutWriteCapability(t *testing.T)
 		t.Error("wrote on a read-only build even though a key was persisted")
 	}
 }
+
+func TestReadItemInputDashIsStdin(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte(`{"itemType":"book","title":"from-dash"}`)
+	go func() {
+		_, _ = w.Write(payload)
+		_ = w.Close()
+	}()
+	old := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = old }()
+
+	got, err := readItemInput("-")
+	if err != nil {
+		t.Fatalf("readItemInput(-): %v", err)
+	}
+	if string(got) != string(payload) {
+		t.Fatalf("got %q, want %q", got, payload)
+	}
+}
+
+func TestReadItemInputPathStillWorks(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/item.json"
+	want := `{"itemType":"book","title":"path"}`
+	if err := os.WriteFile(path, []byte(want), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := readItemInput(path)
+	if err != nil {
+		t.Fatalf("readItemInput(path): %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestItemCreateFileDashDryRun(t *testing.T) {
+	srv := fakeZotero(true)
+	defer srv.Close()
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		_, _ = w.Write([]byte(`{"itemType":"book","title":"dash-create"}`))
+		_ = w.Close()
+	}()
+	old := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = old }()
+
+	got, _, err := runCLI(srv.URL, "--json", "item", "create", "--dry-run", "--file", "-")
+	if err != nil {
+		t.Fatalf("err = %v\nout=%s", err, got)
+	}
+	if !strings.Contains(got, "dash-create") {
+		t.Fatalf("output missing title:\n%s", got)
+	}
+}
