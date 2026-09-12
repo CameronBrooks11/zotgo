@@ -50,3 +50,8 @@ changelog:
 
 release:
   draft: false
+  # auto marks a tag carrying a semver prerelease component (v1.0.0-rc.1) as a
+  # prerelease on GitHub. The default is false, which publishes a candidate as
+  # the latest stable release — v1.0.0-rc.1 shipped that way and was corrected
+  # by hand.
+  prerelease: auto
