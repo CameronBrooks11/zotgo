@@ -48,7 +48,7 @@ func itemCreateCommand() *cli.Command {
 			"the new item simply has numChildren 0. When copying an item, check the source's\n" +
 			"numChildren first and re-attach files with `zot attachment import`.",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "file", Aliases: []string{"f"}, Usage: "read item JSON from this file instead of stdin"},
+			&cli.StringFlag{Name: "file", Aliases: []string{"f"}, Usage: "read item JSON from this file instead of stdin (- means stdin)"},
 			&cli.BoolFlag{Name: "dry-run", Usage: "show what would be created without writing"},
 			&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "skip the confirmation prompt"},
 		},
@@ -66,7 +66,7 @@ func itemCreateAction(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	file := cmd.String("file")
-	fromStdin := file == ""
+	fromStdin := file == "" || file == "-"
 	raw, err := readItemInput(file)
 	if err != nil {
 		return err
@@ -142,11 +142,12 @@ func itemCreateAction(ctx context.Context, cmd *cli.Command) error {
 	return nil
 }
 
-// readItemInput reads the item JSON from a file, or from stdin when file is "".
-// With no file and an interactive terminal there is nothing to read, so it fails
-// with guidance rather than blocking silently on os.Stdin.
+// readItemInput reads the item JSON from a file, or from stdin when file is ""
+// or "-" (the usual stdin shorthand). With no file and an interactive terminal
+// there is nothing to read, so it fails with guidance rather than blocking
+// silently on os.Stdin.
 func readItemInput(file string) ([]byte, error) {
-	if file != "" {
+	if file != "" && file != "-" {
 		return os.ReadFile(file)
 	}
 	if isTerminal(os.Stdin) {
@@ -524,7 +525,7 @@ func itemPatchCommand() *cli.Command {
 		Usage:     "update fields of one item from a JSON object on stdin or --file",
 		ArgsUsage: "<item-key>",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "file", Aliases: []string{"f"}, Usage: "read the patch JSON from this file instead of stdin"},
+			&cli.StringFlag{Name: "file", Aliases: []string{"f"}, Usage: "read the patch JSON from this file instead of stdin (- means stdin)"},
 			&cli.BoolFlag{Name: "dry-run", Usage: "show what would change without writing"},
 			&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "skip the confirmation prompt"},
 		},
@@ -545,7 +546,7 @@ func itemPatchAction(ctx context.Context, cmd *cli.Command) error {
 		return errors.New("missing item key (usage: zot item patch <item-key>)")
 	}
 	file := cmd.String("file")
-	fromStdin := file == ""
+	fromStdin := file == "" || file == "-"
 	raw, err := readItemInput(file)
 	if err != nil {
 		return err
@@ -624,7 +625,7 @@ func itemReplaceCommand() *cli.Command {
 		Usage:     "overwrite one item with a complete JSON object (fields you omit are reset)",
 		ArgsUsage: "<item-key>",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "file", Aliases: []string{"f"}, Usage: "read the full item JSON from this file instead of stdin"},
+			&cli.StringFlag{Name: "file", Aliases: []string{"f"}, Usage: "read the full item JSON from this file instead of stdin (- means stdin)"},
 			&cli.BoolFlag{Name: "dry-run", Usage: "show what would change without writing"},
 			&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "skip the confirmation prompt"},
 		},
@@ -645,7 +646,7 @@ func itemReplaceAction(ctx context.Context, cmd *cli.Command) error {
 		return errors.New("missing item key (usage: zot item replace <item-key>)")
 	}
 	file := cmd.String("file")
-	fromStdin := file == ""
+	fromStdin := file == "" || file == "-"
 	raw, err := readItemInput(file)
 	if err != nil {
 		return err
