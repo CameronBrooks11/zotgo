@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -26,6 +27,15 @@ var ErrAttachmentHasNoFile = errors.New("attachment has no local file")
 func (c *Client) AttachmentLocalPath(ctx context.Context, library LibraryRef, key string) (string, error) {
 	body, _, err := c.do(ctx, c.profile.LibraryPrefix(library)+"/items/"+url.PathEscape(key)+"/file/view/url", nil)
 	if err != nil {
+		// Zotero answers 400 when the item has no file to point at — observed as
+		// `Not a file attachment: <key>`. That is an ordinary outcome for a
+		// linked_url attachment, not a fault, and a caller walking an item's
+		// children has to tell it apart from a real failure. 404 stays ErrNotFound:
+		// a missing item is a different thing from an item without a file.
+		var status StatusError
+		if errors.As(err, &status) && status.StatusCode == http.StatusBadRequest {
+			return "", fmt.Errorf("attachment %q: %w (%s)", key, ErrAttachmentHasNoFile, status.Body)
+		}
 		return "", err
 	}
 	return decodeAttachmentFileURL(string(body), key)

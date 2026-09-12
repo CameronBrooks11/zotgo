@@ -1,7 +1,10 @@
 package zotero
 
 import (
+	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -87,5 +90,43 @@ func TestDecodeAttachmentFileURLNoFileIsASentinel(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "ABCD1234") {
 		t.Errorf("err = %v, want it to name the attachment key", err)
+	}
+}
+
+// An attachment with no file is an ordinary outcome, and Zotero reports it as a
+// 400 rather than an empty body — so the sentinel has to fire on the status, or
+// it never fires at all and a caller walking children cannot tell "nothing to
+// carry" from "something broke".
+func TestAttachmentLocalPathNoFileIs400(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("Not a file attachment: ABCD1234"))
+	}))
+	defer srv.Close()
+
+	_, err := New(srv.URL).AttachmentLocalPath(context.Background(), UserLibrary(), "ABCD1234")
+	if !errors.Is(err, ErrAttachmentHasNoFile) {
+		t.Fatalf("err = %v, want it to wrap ErrAttachmentHasNoFile", err)
+	}
+	if !strings.Contains(err.Error(), "Not a file attachment") {
+		t.Errorf("err = %v, want Zotero's own reason preserved for diagnosis", err)
+	}
+}
+
+// A missing item is a different condition from an item without a file, and a
+// caller that conflated them would skip a genuinely broken key in silence.
+func TestAttachmentLocalPathMissingItemIsNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	_, err := New(srv.URL).AttachmentLocalPath(context.Background(), UserLibrary(), "ZZZZZZZZ")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+	if errors.Is(err, ErrAttachmentHasNoFile) {
+		t.Error("a missing item must not read as an attachment without a file")
 	}
 }
