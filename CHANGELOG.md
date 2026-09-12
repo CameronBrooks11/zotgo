@@ -12,6 +12,14 @@ Planned and outstanding work is tracked in the
 
 ### Changed
 
+- **Breaking.** `item.replace` is no longer in the default `zot grant` scope and
+  must be named with `--operations`. A full replace resets every field the
+  payload omits, so it loses data by the same definition the delete operations
+  are withheld under — the design document had already called it "a destructive
+  full overwrite" while the default granted it anyway. A lease minted for a
+  single `item.create` carried the ability to overwrite any item in the library
+  wholesale.
+
 - **Breaking.** `zot grant` now requires an explicit library: pass `--library`
   (`me`, a group name, or a group id) or set `ZOTGO_LIBRARY` for the session. A
   bare `zot grant` previously defaulted to My Library, so the command combined
