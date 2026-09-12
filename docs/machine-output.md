@@ -23,6 +23,39 @@ for every command, so a script learns it once:
 }
 ```
 
+### The DTO is a read contract, not a write schema
+
+**`--json` output does not feed the write commands.** Piping `zot show --json`
+into `zot item create` produces an item Zotero will not accept, because the DTO
+and Zotero's write vocabulary are different shapes:
+
+| DTO | Zotero write field |
+| --- | --- |
+| `type` | `itemType` |
+| `creators[].type` | `creators[].creatorType` |
+| `tags[].name` + `automatic` | `tags[].tag` + `type` |
+| `parentKey` | `parentItem` |
+
+The DTO also carries fields derived for reading that a write never accepts —
+`parsedDate`, `creatorSummary`, `numChildren`, `children`, `dateAdded`,
+`dateModified`.
+
+This is deliberate. The DTO exists to be stable and legible for scripts and
+humans; Zotero's write vocabulary exists to be validated by Zotero. Making the
+read shape double as a write schema would make every future DTO field addition a
+write-path question, which is a large commitment for a convenience.
+
+**To build a write payload from an existing item, use `--raw`**, which is
+Zotero's own object and round-trips by construction:
+
+```sh
+zot show KEY --raw | jq '.item.data | del(.key, .version, .relations)' \
+  | zot item create --library "<target>" --yes
+```
+
+Note that this copies **metadata only** — see the note on children under
+`item create` in [writing.md](writing.md).
+
 `kind` says what `data` holds: `items`, `item`, `attachment`,
 `attachment-import`, `annotations`, `annotation`, `note`, `relations`,
 `relation`, `collections`, `collection`, `stats`, `health`, or one of the mutation
