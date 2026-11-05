@@ -91,6 +91,10 @@ func grantAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	fmt.Fprintf(w, "  operations: %s\n", strings.Join(ops, ", "))
 	fmt.Fprintf(w, "  expires:    %s (in %s)\n", expires.Format(time.RFC3339), ttl)
+	if !confirmReplaceLease(os.Stdin, w, time.Now()) {
+		fmt.Fprintln(w, "Aborted; the existing lease is unchanged.")
+		return nil
+	}
 	if !confirmLongLease(os.Stdin, w, ttl, expires) {
 		fmt.Fprintln(w, "Aborted.")
 		return nil
@@ -147,6 +151,35 @@ func confirmLongLease(in io.Reader, w io.Writer, ttl time.Duration, expires time
 	fmt.Fprintf(w, "\nThis lease is long-lived: non-interactive writes stay authorized for %s,\n", ttl)
 	fmt.Fprintf(w, "until %s, unless you end it early with 'zot grant revoke'.\n", end)
 	return confirm(in, w, fmt.Sprintf("Keep this lease open until %s?", end))
+}
+
+// confirmReplaceLease gates minting over a lease that is still live: there is
+// one lease, so a new grant replaces it, and a job relying on the old one would
+// otherwise lose its authority with nothing on screen to say so. The warning
+// names the lease being displaced and only an explicit yes proceeds. With no
+// lease, or only an expired one, there is nothing to displace and no prompt. An
+// unreadable lease authorizes nothing, but it is still not replaced silently.
+// Like confirmLongLease it takes its reader and writer as arguments so the prompt
+// is testable without a terminal.
+func confirmReplaceLease(in io.Reader, w io.Writer, now time.Time) bool {
+	l, err := loadActiveLease()
+	if errors.Is(err, ErrNoActiveLease) {
+		return true
+	}
+	if err != nil {
+		fmt.Fprintf(w, "\nAn existing write lease is unreadable (%v); granting replaces it.\n", err)
+		return confirm(in, w, "Replace the unreadable lease?")
+	}
+	if now.After(l.Expires) {
+		return true
+	}
+	fmt.Fprintf(w, "\nA write lease is already active, and granting replaces it:\n")
+	fmt.Fprintf(w, "  lease:      %s\n", l.ID)
+	fmt.Fprintf(w, "  libraries:  %s\n", strings.Join(l.Scope.Libraries, ", "))
+	fmt.Fprintf(w, "  operations: %s\n", strings.Join(l.Scope.Operations, ", "))
+	fmt.Fprintf(w, "  expires:    %s (in %s)\n", l.Expires.Format(time.RFC3339), l.Expires.Sub(now).Round(time.Minute))
+	fmt.Fprintln(w, "Anything relying on it loses that authority once the new lease is saved.")
+	return confirm(in, w, fmt.Sprintf("Replace lease %s?", l.ID))
 }
 
 func grantStatusCommand() *cli.Command {

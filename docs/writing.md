@@ -190,6 +190,11 @@ names the concrete end date, and `zot grant status` marks it `LONG-LIVED` with t
 time it has left for as long as it runs. Revoke it as soon as the job that needed
 it is done.
 
+**One lease at a time.** A new grant replaces the active lease. If that lease is
+still live, `zot grant` names it — id, scope, expiry — and replaces it only when
+you answer yes; declining leaves it in place. An expired lease is replaced
+without asking.
+
 **The library is never inferred.** `--library` (or `ZOTGO_LIBRARY` for the
 session) is required for `grant` alone. Every other command defaults to My
 Library harmlessly — a read reaches the wrong library and you see it. A lease

@@ -294,6 +294,85 @@ func TestConfirmLongLease(t *testing.T) {
 	}
 }
 
+// Minting over a live lease must name it and replace it only on an explicit
+// yes, so an agent's authority is never silently clobbered (#136). An expired
+// lease authorizes nothing, so replacing it needs no prompt; neither does the
+// first grant.
+func TestConfirmReplaceLease(t *testing.T) {
+	now := time.Now()
+	cases := []struct {
+		name       string
+		expires    time.Time // zero: no lease on disk
+		answer     string
+		want       bool
+		wantPrompt bool
+	}{
+		{"no lease is not prompted", time.Time{}, "", true, false},
+		{"expired lease is not prompted", now.Add(-time.Minute), "", true, false},
+		{"live lease, accepted", now.Add(MaxLeaseTTL), "y\n", true, true},
+		{"live lease, declined", now.Add(MaxLeaseTTL), "n\n", false, true},
+		{"live lease, empty answer defaults to no", now.Add(time.Hour), "\n", false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("ZOTGO_CONFIG_DIR", t.TempDir())
+			if !tc.expires.IsZero() {
+				seedLeaseScoped(t, tc.expires, zotero.OpItemPatch)
+			}
+			var buf strings.Builder
+			got := confirmReplaceLease(strings.NewReader(tc.answer), &buf, now)
+			if got != tc.want {
+				t.Errorf("confirmReplaceLease(%q) = %v, want %v", tc.answer, got, tc.want)
+			}
+			prompted := strings.Contains(buf.String(), "already active")
+			if prompted != tc.wantPrompt {
+				t.Errorf("prompted = %v, want %v; output:\n%s", prompted, tc.wantPrompt, buf.String())
+			}
+			if tc.wantPrompt {
+				// The warning names the lease being displaced: id, scope, and end date.
+				for _, want := range []string{"lease_scoped", "user:0", "item.patch", tc.expires.Format(time.RFC3339)} {
+					if !strings.Contains(buf.String(), want) {
+						t.Errorf("warning does not name %q:\n%s", want, buf.String())
+					}
+				}
+			}
+			// Asking never touches the stored lease; only the later save replaces it.
+			if !tc.expires.IsZero() {
+				l, err := loadActiveLease()
+				if err != nil || l.ID != "lease_scoped" {
+					t.Errorf("existing lease changed by the prompt: %+v, %v", l, err)
+				}
+			}
+		})
+	}
+}
+
+// An unreadable lease authorizes nothing, but it is still not replaced silently:
+// the prompt says it is unreadable and waits for a yes.
+func TestConfirmReplaceLeaseUnreadable(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ZOTGO_CONFIG_DIR", dir)
+	path, err := leasePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		answer string
+		want   bool
+	}{{"n\n", false}, {"y\n", true}} {
+		var buf strings.Builder
+		if got := confirmReplaceLease(strings.NewReader(tc.answer), &buf, time.Now()); got != tc.want {
+			t.Errorf("confirmReplaceLease(%q) on an unreadable lease = %v, want %v", tc.answer, got, tc.want)
+		}
+		if !strings.Contains(buf.String(), "unreadable") {
+			t.Errorf("prompt did not say the lease is unreadable:\n%s", buf.String())
+		}
+	}
+}
+
 // A lease's library is never inferred. Defaulting to My Library means a bare
 // `zot grant`, typed after a session spent in a group library, silently
 // authorizes writes across the largest library on the account (#114).

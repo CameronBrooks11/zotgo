@@ -10,6 +10,16 @@ Planned and outstanding work is tracked in the
 
 ## [Unreleased]
 
+### Fixed
+
+- `zot grant` no longer replaces a live write lease silently. There is one lease,
+  so a new grant displaces the old one, and a short grant could quietly replace a
+  long one a running job depended on, which then began failing authorization
+  when the short lease expired. Minting over a live lease now names it (id,
+  scope, expiry) and replaces it only on an explicit yes; declining leaves it
+  untouched and never opens Zotero's authorize prompt. No lease, or an expired
+  one, is replaced without asking, as before (#136).
+
 ## [1.0.0-rc.1] - 2026-09-11
 
 The first release candidate. Nothing new is added; what changed is that the
